@@ -39,7 +39,7 @@ cd frontend && npm test
 
 **Backend**: FastAPI app at `backend/main.py`. SQLite via `backend/database.py`. DB path defaults to `finances.db`, overridable via `DB_PATH` env var.
 
-**Frontend**: React 18 + TypeScript + Vite at `frontend/`. API client at `frontend/src/api/client.ts`. Pages in `frontend/src/pages/`. Shared UI components in `frontend/src/components/` (including `LoadingSpinner` and `Alert`).
+**Frontend**: React 19 + TypeScript + Vite at `frontend/`. API client at `frontend/src/api/client.ts`. Pages in `frontend/src/pages/`. Shared UI components in `frontend/src/components/` (including `LoadingSpinner` and `Alert`).
 
 **Single-process deployment**: `npm run build` outputs to `backend/static/dist/`; FastAPI serves it as static files. One Docker container.
 
