@@ -1,0 +1,39 @@
+.git
+.gitignore
+.venv
+venv
+env
+*.env
+.env
+
+# Database (mounted at runtime)
+finances.db
+
+# Python cache
+__pycache__
+*.py[cod]
+*.pyo
+.mypy_cache
+.pytest_cache
+
+# Node
+frontend/node_modules
+
+# Build artifacts
+backend/static/dist
+frontend/dist
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode
+.idea
+
+# Docs
+*.md
+plan.md
+
+# Import files
+*.xlsx
+*.csv
