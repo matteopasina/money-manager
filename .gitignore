@@ -19,7 +19,13 @@ __pycache__/
 backend/static/dist/
 
 # Node
+node_modules/
 frontend/node_modules/
+/package.json
+/package-lock.json
+
+# Claude Code / OMC internal state
+.omc/
 
 # Import files (may contain personal data)
 *.xlsx

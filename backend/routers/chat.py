@@ -197,6 +197,7 @@ def _run_tool(name: str, inputs: dict) -> str:
 class ChatRequest(BaseModel):
     messages: list[dict]   # full OpenAI-format history (no system message)
     model: str
+    page_context: str = ""  # current page data injected by the frontend
     # api_key is read from app_settings (llm_api_key) — not accepted from the client
 
 
@@ -215,6 +216,8 @@ def chat(body: ChatRequest):
         "You have tools to query the user's financial data. Always call a tool to fetch data before answering. "
         "Be concise: 1-3 short paragraphs or a bullet list. Use the base currency symbol for amounts."
     )
+    if body.page_context:
+        system += f"\n\nThe user is currently viewing this page data:\n{body.page_context}"
     messages = [{"role": "system", "content": system}] + body.messages
 
     for _ in range(8):
@@ -222,7 +225,10 @@ def chat(body: ChatRequest):
         if api_key:
             kwargs["api_key"] = api_key
 
-        response = litellm.completion(**kwargs)
+        try:
+            response = litellm.completion(**kwargs)
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=str(e))
         choice = response.choices[0]
         msg = choice.message
 

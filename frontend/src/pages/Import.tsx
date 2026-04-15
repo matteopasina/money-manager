@@ -22,7 +22,9 @@ export default function Import() {
   const [previewing, setPreviewing] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const [msg, setMsg]             = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [page, setPage]           = useState(0)
   const fileRef = useRef<HTMLInputElement>(null)
+  const PAGE_SIZE = 20
 
   useEffect(() => {
     Promise.all([api.accounts.list(true), api.import.adapters()])
@@ -39,10 +41,11 @@ export default function Import() {
       const fd = new FormData()
       fd.append('file', file)
       fd.append('account_id', accountId)
-      fd.append('adapter', adapter)
+      fd.append('adapter_name', adapter)
       const res = await api.import.preview(fd)
       if (res.error) throw new Error(res.error)
-      setPreview(res)
+      setPreview({ adapter, imports: res.imports, rows: res.preview, count: res.total })
+      setPage(0)
     } catch (e: unknown) {
       setMsg({ type: 'error', text: e instanceof Error ? e.message : String(e) })
     } finally {
@@ -57,10 +60,10 @@ export default function Import() {
       const fd = new FormData()
       fd.append('file', file)
       fd.append('account_id', accountId)
-      fd.append('adapter', adapter)
+      fd.append('adapter_name', adapter)
       const res = await api.import.confirm(fd)
       if (res.error) throw new Error(res.error)
-      setMsg({ type: 'success', text: `Imported ${res.imported} rows (${res.skipped} duplicates skipped).` })
+      setMsg({ type: 'success', text: `Imported ${res.inserted} rows (${res.skipped} duplicates skipped).` })
       setPreview(null)
       setFile(null)
       if (fileRef.current) fileRef.current.value = ''
@@ -158,7 +161,7 @@ export default function Import() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(preview.rows as TransactionRow[]).slice(0, 50).map((r, i) => (
+                  {(preview.rows as TransactionRow[]).slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((r, i) => (
                     <tr key={i}>
                       <td style={{ whiteSpace: 'nowrap' }}>{r.date}</td>
                       <td>{r.description}</td>
@@ -182,7 +185,7 @@ export default function Import() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(preview.rows as BalanceRow[]).slice(0, 50).map((r, i) => (
+                  {(preview.rows as BalanceRow[]).slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((r, i) => (
                     <tr key={i}>
                       <td style={{ whiteSpace: 'nowrap' }}>{r.date}</td>
                       <td>{r.account}</td>
@@ -194,10 +197,14 @@ export default function Import() {
               </table>
             )}
           </div>
-          {preview.count > 50 && (
-            <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
-              Showing first 50 of {preview.count} rows.
-            </p>
+          {preview.count > PAGE_SIZE && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.75rem', fontSize: '0.85rem' }}>
+              <button className="btn btn-secondary" onClick={() => setPage(p => p - 1)} disabled={page === 0} style={{ padding: '0.25rem 0.6rem' }}>←</button>
+              <span style={{ color: 'var(--text-muted)' }}>
+                Page {page + 1} of {Math.ceil(preview.count / PAGE_SIZE)}
+              </span>
+              <button className="btn btn-secondary" onClick={() => setPage(p => p + 1)} disabled={(page + 1) * PAGE_SIZE >= preview.count} style={{ padding: '0.25rem 0.6rem' }}>→</button>
+            </div>
           )}
         </div>
       )}

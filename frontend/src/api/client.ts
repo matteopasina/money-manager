@@ -77,6 +77,8 @@ export const api = {
         request<void>(`/categories/rules/${id}`, { method: 'DELETE' }),
       reapply: () =>
         request<{ updated: number }>('/categories/rules/reapply', { method: 'POST' }),
+      seedDefaults: () =>
+        request<{ inserted: number; skipped: number }>('/categories/rules/seed-defaults', { method: 'POST' }),
     },
   },
 
@@ -107,7 +109,7 @@ export const api = {
   },
 
   // Chat
-  chat: (body: { messages: ChatMessage[]; model: string }) =>
+  chat: (body: { messages: ChatMessage[]; model: string; page_context?: string }) =>
     request<{ reply: string; messages: ChatMessage[] }>('/chat', {
       method: 'POST', body: JSON.stringify(body),
     }),

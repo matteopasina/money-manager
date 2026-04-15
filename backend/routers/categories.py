@@ -94,3 +94,9 @@ def reapply_rules():
     rules = db.get_keyword_rules()
     count = recategorise_all(rules)
     return {"updated": count}
+
+
+@router.post("/rules/seed-defaults")
+def seed_default_rules():
+    inserted, skipped = db.seed_keyword_rules_defaults()
+    return {"inserted": inserted, "skipped": skipped}

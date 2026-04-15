@@ -8,7 +8,7 @@ export default function Transactions() {
   const [accounts, setAccounts]   = useState<Account[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading]     = useState(true)
-  const [filters, setFilters]     = useState({ account_id: '', start: '', end: '', search: '' })
+  const [filters, setFilters]     = useState({ account_id: '', start: '', end: '', search: '', category: '' })
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editCat, setEditCat]     = useState('')
 
@@ -45,17 +45,21 @@ export default function Transactions() {
   }
 
   const visible = useMemo(() => {
+    let result = rows
+    if (filters.category) result = result.filter(r => r.category === filters.category)
     const search = filters.search.toLowerCase()
-    if (!search) return rows
-    return rows.filter(r =>
+    if (!search) return result
+    return result.filter(r =>
       r.description.toLowerCase().includes(search) ||
       (r.reference ?? '').toLowerCase().includes(search) ||
       (r.category ?? '').toLowerCase().includes(search)
     )
-  }, [rows, filters.search])
+  }, [rows, filters.search, filters.category])
 
-  const totalIncome = visible.filter(r => r.amount > 0).reduce((s, r) => s + r.amount, 0)
-  const totalSpend  = visible.filter(r => r.amount < 0).reduce((s, r) => s + r.amount, 0)
+  const transferCats = useMemo(() => new Set(categories.filter(c => c.is_transfer).map(c => c.name)), [categories])
+  const totalIncome  = visible.filter(r => r.amount > 0 && !transferCats.has(r.category ?? '')).reduce((s, r) => s + r.amount, 0)
+  const totalSpend   = visible.filter(r => r.amount < 0 && !transferCats.has(r.category ?? '')).reduce((s, r) => s + r.amount, 0)
+  const totalInvest  = visible.filter(r => transferCats.has(r.category ?? '')).reduce((s, r) => s + r.amount, 0)
 
   return (
     <div>
@@ -65,12 +69,19 @@ export default function Transactions() {
       </div>
 
       <div className="card" style={{ marginBottom: '1rem' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 2fr', gap: '0.75rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 2fr', gap: '0.75rem' }}>
           <div className="form-group" style={{ margin: 0 }}>
             <label>Account</label>
             <select value={filters.account_id} onChange={e => setFilters(f => ({ ...f, account_id: e.target.value }))}>
               <option value="">All accounts</option>
               {accounts.map(a => <option key={a.id} value={String(a.id)}>{a.name}</option>)}
+            </select>
+          </div>
+          <div className="form-group" style={{ margin: 0 }}>
+            <label>Category</label>
+            <select value={filters.category} onChange={e => setFilters(f => ({ ...f, category: e.target.value }))}>
+              <option value="">All categories</option>
+              {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
             </select>
           </div>
           <div className="form-group" style={{ margin: 0 }}>
@@ -107,6 +118,12 @@ export default function Transactions() {
           <div className="metric-label">Spending</div>
           <div className="metric-value" style={{ fontSize: '1.4rem', color: 'var(--danger)' }}>
             {fmtAmount(totalSpend)}
+          </div>
+        </div>
+        <div className="card">
+          <div className="metric-label">Investment</div>
+          <div className="metric-value" style={{ fontSize: '1.4rem', color: 'var(--accent-blue, #60a5fa)' }}>
+            {fmtAmount(totalInvest)}
           </div>
         </div>
       </div>

@@ -72,12 +72,12 @@ async def preview(
         preview_rows = [
             {"date": r.date, "description": r.description,
              "amount": r.amount, "category": r.category, "reference": r.reference}
-            for r in records[:20]
+            for r in records
         ]
     else:
         preview_rows = [
             {"date": r.date, "amount_native": r.amount_native, "amount_base": r.amount_base}
-            for r in records[:20]
+            for r in records
         ]
     return {"total": len(records), "imports": imports_type, "preview": preview_rows}
 

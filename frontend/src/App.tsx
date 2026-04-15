@@ -1,7 +1,7 @@
 import { BrowserRouter, NavLink, Routes, Route, Navigate } from 'react-router-dom'
 import {
   LayoutDashboard, PlusCircle, UploadCloud, Settings,
-  BarChart2, Target, Receipt, Tag, Archive, Wallet,
+  BarChart2, Target, Receipt, Tag, Archive, Wallet, SlidersHorizontal,
 } from 'lucide-react'
 import './styles/globals.css'
 import ChatSidebar from './components/ChatSidebar'
@@ -14,6 +14,7 @@ import ManageBalances from './pages/ManageBalances'
 import Predictions from './pages/Predictions'
 import GoalCalculator from './pages/GoalCalculator'
 import Categories from './pages/Categories'
+import SettingsPage from './pages/Settings'
 
 const NAV_OVERVIEW = [
   { to: '/dashboard',    icon: LayoutDashboard, label: 'Dashboard' },
@@ -29,8 +30,9 @@ const NAV_MANAGE = [
 ]
 
 const NAV_SETTINGS = [
-  { to: '/categories', icon: Tag,      label: 'Categories' },
-  { to: '/accounts',   icon: Settings, label: 'Accounts & FX' },
+  { to: '/categories', icon: Tag,               label: 'Categories' },
+  { to: '/accounts',   icon: Settings,           label: 'Accounts & FX' },
+  { to: '/settings',   icon: SlidersHorizontal,  label: 'Settings' },
 ]
 
 function NavGroup({ label, items }: { label: string; items: typeof NAV_OVERVIEW }) {
@@ -63,7 +65,6 @@ export default function App() {
           <NavGroup label="Overview" items={NAV_OVERVIEW} />
           <NavGroup label="Manage" items={NAV_MANAGE} />
           <NavGroup label="Settings" items={NAV_SETTINGS} />
-          <ChatSidebar />
         </nav>
 
         <main className="main-content">
@@ -78,8 +79,10 @@ export default function App() {
             <Route path="/manage-balances" element={<ManageBalances />} />
             <Route path="/categories"      element={<Categories />} />
             <Route path="/accounts"        element={<Accounts />} />
+            <Route path="/settings"        element={<SettingsPage />} />
           </Routes>
         </main>
+        <ChatSidebar />
       </div>
     </BrowserRouter>
   )

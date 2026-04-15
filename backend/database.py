@@ -428,6 +428,88 @@ def delete_keyword_rule(rule_id: int) -> None:
         conn.execute("DELETE FROM keyword_rules WHERE id = ?", (rule_id,))
 
 
+_DEFAULT_RULES: list[tuple[str, str, str, int]] = [
+    # Food
+    ("ristorante",  "Food", "description", 0),
+    ("osteria",     "Food", "description", 0),
+    ("trattoria",   "Food", "description", 0),
+    ("pizzeria",    "Food", "description", 0),
+    ("braceria",    "Food", "description", 0),
+    ("rifugio",     "Food", "description", 0),
+    ("grill",       "Food", "description", 0),
+    ("kfc",         "Food", "description", 0),
+    ("mcdonald",    "Food", "description", 0),
+    ("burger",      "Food", "description", 0),
+    ("buonissimo",  "Food", "description", 0),
+    # Groceries
+    ("mercadona",   "Groceries", "description", 0),
+    ("lidl",        "Groceries", "description", 0),
+    ("esselunga",   "Groceries", "description", 0),
+    ("carrefour",   "Groceries", "description", 0),
+    ("conad",       "Groceries", "description", 0),
+    ("eurospin",    "Groceries", "description", 0),
+    ("aldi",        "Groceries", "description", 0),
+    ("mercasosa",   "Groceries", "description", 0),
+    # Transport
+    ("repsol",      "Transport", "description", 0),
+    ("agip",        "Transport", "description", 0),
+    # Sport
+    ("decathlon",   "Sport", "description", 0),
+    ("playtomic",   "Sport", "description", 0),
+    ("palestra",    "Sport", "description", 0),
+    ("piscina",     "Sport", "description", 0),
+    ("rightfeeling","Sport", "description", 0),
+    ("federcons",   "Sport", "description", 0),
+    ("ski stop",    "Sport", "description", 0),
+    # Travel
+    ("hotel",       "Travel", "description", 0),
+    ("booking",     "Travel", "description", 0),
+    ("airbnb",      "Travel", "description", 0),
+    ("trenitalia",  "Travel", "description", 0),
+    ("ryanair",     "Travel", "description", 0),
+    ("easyjet",     "Travel", "description", 0),
+    ("funivia",     "Sport", "description", 0),
+    ("funivie",     "Sport", "description", 0),
+    # Entertainment
+    ("netflix",     "Entertainment", "description", 0),
+    ("spotify",     "Entertainment", "description", 0),
+    ("prime video", "Entertainment", "description", 0),
+    ("disney",      "Entertainment", "description", 0),
+    ("starplex",    "Entertainment", "description", 0),
+    ("cinema",      "Entertainment", "description", 0),
+    # Health
+    ("farmacia",    "Health", "description", 0),
+    ("clinicsport", "Health", "description", 0),
+    # Bills
+    ("enel",        "Bills", "description", 0),
+    ("vodafone",    "Bills", "description", 0),
+    ("fastweb",     "Bills", "description", 0),
+    ("addebito american express", "Bills", "description", 0),
+    ("wind tre",    "Bills", "description", 0),
+    ("iliad",       "Bills", "description", 0),
+    # Shopping
+    ("amazon",      "Shopping", "description", 0),
+    ("zara",        "Shopping", "description", 0),
+]
+
+
+def seed_keyword_rules_defaults() -> tuple[int, int]:
+    """Insert default keyword rules, skipping keywords that already exist."""
+    inserted = skipped = 0
+    with get_connection() as conn:
+        existing = {row[0].lower() for row in conn.execute("SELECT keyword FROM keyword_rules").fetchall()}
+        for keyword, category_name, match_field, priority in _DEFAULT_RULES:
+            if keyword.lower() in existing:
+                skipped += 1
+            else:
+                conn.execute(
+                    "INSERT INTO keyword_rules (keyword, category_name, match_field, priority) VALUES (?, ?, ?, ?)",
+                    (keyword, category_name, match_field, priority),
+                )
+                inserted += 1
+    return inserted, skipped
+
+
 # ── Analytics helpers (used by Predictions / Goal Calculator) ──────────────────
 
 def get_transfer_category_names() -> set[str]:

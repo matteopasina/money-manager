@@ -1,4 +1,6 @@
+import json
 from fastapi import APIRouter, Query
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional
 import database as db
@@ -20,8 +22,8 @@ def list_transactions(
     if df.empty:
         return []
     df["date"] = df["date"].astype(str)
-    df["value_date"] = df["value_date"].astype(str).where(df["value_date"].notna(), None)
-    return df.where(df.notna(), None).to_dict(orient="records")
+    df["value_date"] = df["value_date"].where(df["value_date"].notna(), None)
+    return JSONResponse(content=json.loads(df.to_json(orient="records")))
 
 
 @router.patch("/{transaction_id}/category")

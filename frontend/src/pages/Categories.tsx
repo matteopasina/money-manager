@@ -22,6 +22,7 @@ export default function Categories() {
   const [ruleForm, setRuleForm]     = useState<KeywordRuleIn>(EMPTY_RULE)
   const [editRule, setEditRule]     = useState<KeywordRule | null>(null)
   const [reapplying, setReapplying] = useState(false)
+  const [seeding, setSeeding]       = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -111,6 +112,16 @@ export default function Categories() {
       flash('success', `Re-applied rules: ${res.updated} transactions updated.`)
     } catch (e: unknown) { flash('error', e instanceof Error ? e.message : String(e)) }
     finally { setReapplying(false) }
+  }
+
+  async function seedDefaults() {
+    setSeeding(true)
+    try {
+      const res = await api.categories.rules.seedDefaults()
+      flash('success', `Smart defaults added: ${res.inserted} new rules (${res.skipped} already existed).`)
+      await load()
+    } catch (e: unknown) { flash('error', e instanceof Error ? e.message : String(e)) }
+    finally { setSeeding(false) }
   }
 
   if (loading) return <LoadingSpinner />
@@ -206,9 +217,14 @@ export default function Categories() {
       {/* ── Keyword rules ── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
         <div className="section-title" style={{ margin: 0 }}>Keyword Rules</div>
-        <button className="btn btn-secondary btn-sm" onClick={reapply} disabled={reapplying}>
-          {reapplying ? 'Re-applying…' : '↺ Re-apply to all transactions'}
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button className="btn btn-secondary btn-sm" onClick={seedDefaults} disabled={seeding}>
+            {seeding ? 'Adding…' : '✦ Seed smart defaults'}
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={reapply} disabled={reapplying}>
+            {reapplying ? 'Re-applying…' : '↺ Re-apply to all transactions'}
+          </button>
+        </div>
       </div>
       <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
         When a transaction's description or reference contains the keyword (case-insensitive), it is assigned to the category.
