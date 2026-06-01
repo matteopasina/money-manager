@@ -1,7 +1,49 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { api, type TransactionRow, type Account, type Category } from '../api/client'
 import LoadingSpinner from '../components/LoadingSpinner'
-import { fmtAmount } from '../components/MoneyChart'
+import MoneyChart, { fmtAmount } from '../components/MoneyChart'
+
+function buildCashFlowTraces(rows: TransactionRow[], transferCats: Set<string>) {
+  const byMonth: Record<string, { income: number; spend: number; invest: number }> = {}
+  for (const r of rows) {
+    const month = r.date.slice(0, 7)
+    if (!byMonth[month]) byMonth[month] = { income: 0, spend: 0, invest: 0 }
+    if (transferCats.has(r.category ?? '')) {
+      byMonth[month].invest += Math.abs(r.amount)
+    } else if (r.amount > 0) {
+      byMonth[month].income += r.amount
+    } else {
+      byMonth[month].spend += Math.abs(r.amount)
+    }
+  }
+  const months = Object.keys(byMonth).sort()
+  return [
+    { x: months, y: months.map(m => byMonth[m].income), type: 'bar' as const, name: 'Income',     marker: { color: '#10b981' } },
+    { x: months, y: months.map(m => byMonth[m].spend),  type: 'bar' as const, name: 'Spending',   marker: { color: '#ef4444' } },
+    { x: months, y: months.map(m => byMonth[m].invest), type: 'bar' as const, name: 'Investment', marker: { color: '#f59e0b' } },
+  ]
+}
+
+function buildCategoryTrace(rows: TransactionRow[], categories: Category[]) {
+  const colorMap = Object.fromEntries(categories.map(c => [c.name, c.color]))
+  const byCategory: Record<string, number> = {}
+  for (const r of rows) {
+    if (r.amount >= 0) continue
+    const cat = r.category ?? 'Uncategorized'
+    byCategory[cat] = (byCategory[cat] ?? 0) + Math.abs(r.amount)
+  }
+  const labels = Object.keys(byCategory)
+  return [{
+    labels,
+    values: labels.map(l => byCategory[l]),
+    type: 'pie' as const,
+    hole: 0.52,
+    marker: { colors: labels.map(l => colorMap[l] ?? '#94a3b8'), line: { color: '#ffffff', width: 2 } },
+    textinfo: 'label+percent' as const,
+    textfont: { size: 11 },
+    hovertemplate: '%{label}: %{value:,.0f}<extra></extra>',
+  }]
+}
 
 export default function Transactions() {
   const [rows, setRows]           = useState<TransactionRow[]>([])
@@ -56,10 +98,12 @@ export default function Transactions() {
     )
   }, [rows, filters.search, filters.category])
 
-  const transferCats = useMemo(() => new Set(categories.filter(c => c.is_transfer).map(c => c.name)), [categories])
-  const totalIncome  = visible.filter(r => r.amount > 0 && !transferCats.has(r.category ?? '')).reduce((s, r) => s + r.amount, 0)
-  const totalSpend   = visible.filter(r => r.amount < 0 && !transferCats.has(r.category ?? '')).reduce((s, r) => s + r.amount, 0)
-  const totalInvest  = visible.filter(r => transferCats.has(r.category ?? '')).reduce((s, r) => s + r.amount, 0)
+  const transferCats   = useMemo(() => new Set(categories.filter(c => c.is_transfer).map(c => c.name)), [categories])
+  const totalIncome    = visible.filter(r => r.amount > 0 && !transferCats.has(r.category ?? '')).reduce((s, r) => s + r.amount, 0)
+  const totalSpend     = visible.filter(r => r.amount < 0 && !transferCats.has(r.category ?? '')).reduce((s, r) => s + r.amount, 0)
+  const totalInvest    = visible.filter(r => transferCats.has(r.category ?? '')).reduce((s, r) => s + r.amount, 0)
+  const cashFlowTraces = useMemo(() => buildCashFlowTraces(visible, transferCats), [visible, transferCats])
+  const categoryTraces = useMemo(() => buildCategoryTrace(visible, categories), [visible, categories])
 
   return (
     <div>
@@ -127,6 +171,27 @@ export default function Transactions() {
           </div>
         </div>
       </div>
+
+      {visible.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '1.5rem', marginBottom: '1rem' }}>
+          <div className="card">
+            <div className="section-title" style={{ marginBottom: '0.5rem' }}>Monthly Cash Flow</div>
+            <MoneyChart
+              data={cashFlowTraces}
+              layout={{ barmode: 'group', yaxis: { tickformat: ',.0f' }, showlegend: true }}
+              style={{ height: 240 }}
+            />
+          </div>
+          <div className="card">
+            <div className="section-title" style={{ marginBottom: '0.5rem' }}>Outflows by Category</div>
+            <MoneyChart
+              data={categoryTraces}
+              layout={{ showlegend: false, margin: { t: 10, b: 10, l: 10, r: 10 } }}
+              style={{ height: 240 }}
+            />
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <LoadingSpinner />

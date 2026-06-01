@@ -55,6 +55,24 @@ function buildNetWorthTrace(rows: BalanceRow[]) {
   }
 }
 
+function buildAccountTraces(rows: BalanceRow[]) {
+  const byAccount = rows.reduce<Record<string, { dates: string[]; values: number[] }>>((acc, r) => {
+    if (!acc[r.account]) acc[r.account] = { dates: [], values: [] }
+    acc[r.account].dates.push(r.date)
+    acc[r.account].values.push(r.amount_base)
+    return acc
+  }, {})
+
+  return Object.entries(byAccount).map(([name, { dates, values }], i) => ({
+    x: dates,
+    y: values,
+    type: 'scatter' as const,
+    mode: 'lines' as const,
+    name,
+    line: { color: ACCOUNT_PALETTE[i % ACCOUNT_PALETTE.length], width: 2 },
+  }))
+}
+
 function buildAllocationTrace(metrics: Metrics) {
   const sorted = [...metrics.byAccount].sort((a, b) => b.latest - a.latest)
   return [{
@@ -90,9 +108,10 @@ export default function Dashboard() {
     }).finally(() => setLoading(false))
   }, [])
 
-  const metrics      = useMemo(() => computeMetrics(balances), [balances])
+  const metrics       = useMemo(() => computeMetrics(balances), [balances])
   const netWorthTrace = useMemo(() => buildNetWorthTrace(balances), [balances])
-  const allocTraces  = useMemo(() => buildAllocationTrace(metrics), [metrics])
+  const accountTraces = useMemo(() => buildAccountTraces(balances), [balances])
+  const allocTraces   = useMemo(() => buildAllocationTrace(metrics), [metrics])
   const delta        = metrics.totalNow - metrics.totalPrev
   const pct          = metrics.totalPrev ? (delta / metrics.totalPrev) * 100 : 0
 
@@ -162,6 +181,16 @@ export default function Dashboard() {
         <MoneyChart
           data={[netWorthTrace]}
           layout={{ xaxis: RANGE_XAXIS, yaxis: { tickformat: ',.0f' } }}
+          style={{ height: 300 }}
+        />
+      </div>
+
+      {/* Accounts over time chart */}
+      <div className="section-title">Accounts Over Time</div>
+      <div className="card" style={{ marginBottom: '1.5rem' }}>
+        <MoneyChart
+          data={accountTraces}
+          layout={{ xaxis: RANGE_XAXIS, yaxis: { tickformat: ',.0f' }, showlegend: true }}
           style={{ height: 300 }}
         />
       </div>
