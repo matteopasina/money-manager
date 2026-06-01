@@ -5,16 +5,24 @@ This file provides guidance to Claude Code when working with code in this reposi
 ## Running the app
 
 ```bash
-# Activate venv first (always required)
-source .venv/bin/activate
+# Start both backend and frontend with one command
+make dev
+```
 
-# Backend (FastAPI) — dev mode with auto-reload
+This runs:
+- **Backend** (FastAPI on :8000): `.venv/bin/uvicorn backend.main:app --reload --reload-dir backend`
+- **Frontend** (Vite on :5173): `cd frontend && npm install && npm run dev`
+
+```bash
+# Or run separately:
+
+# Backend
+source .venv/bin/activate
 # --reload-dir backend limits the file watcher to backend/ only (~20 files vs 9500+ in the full project)
-# watchfiles must be installed (in requirements.txt) for event-driven watching (zero idle CPU)
 uvicorn backend.main:app --reload --reload-dir backend
 
-# Frontend (Vite dev server with /api proxy to :8000)
-cd frontend && npm run dev
+# Frontend — npm install is safe to re-run; skips if already up to date
+cd frontend && npm install && npm run dev
 
 # Production build (outputs to backend/static/dist/, served by FastAPI)
 cd frontend && npm run build
