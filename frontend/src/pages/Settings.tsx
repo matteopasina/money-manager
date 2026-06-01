@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../api/client'
 import LoadingSpinner from '../components/LoadingSpinner'
 import Alert from '../components/Alert'
+import { useTheme, type ThemeMode } from '../ThemeContext'
 
 const MODEL_PRESETS = [
   {
@@ -80,16 +81,50 @@ export default function Settings() {
     }
   }
 
+  const { mode, setMode } = useTheme()
+
+  const THEME_OPTIONS: { value: ThemeMode; label: string; desc: string }[] = [
+    { value: 'light',  label: '☀️ Light',  desc: 'Always light' },
+    { value: 'dark',   label: '🌙 Dark',   desc: 'Always dark' },
+    { value: 'system', label: '💻 System', desc: 'Follow macOS setting' },
+  ]
+
   if (loading) return <LoadingSpinner />
 
   return (
     <div>
       <div className="page-header">
         <h1>Settings</h1>
-        <p>Configure the AI assistant</p>
+        <p>Configure appearance and AI assistant</p>
       </div>
 
       {msg && <Alert type={msg.type} onClose={() => setMsg(null)}>{msg.text}</Alert>}
+
+      <div className="card" style={{ maxWidth: 560, marginBottom: '1.5rem' }}>
+        <div className="section-title" style={{ marginBottom: '1rem' }}>Appearance</div>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label>Theme</label>
+          <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.4rem' }}>
+            {THEME_OPTIONS.map(opt => (
+              <button
+                key={opt.value}
+                className="btn btn-secondary"
+                onClick={() => setMode(opt.value)}
+                style={{
+                  flex: 1, flexDirection: 'column', gap: '0.2rem', padding: '0.6rem 0.5rem',
+                  background: mode === opt.value ? 'var(--accent)' : undefined,
+                  color: mode === opt.value ? '#fff' : undefined,
+                  borderColor: mode === opt.value ? 'var(--accent)' : undefined,
+                  fontSize: '0.82rem',
+                }}
+              >
+                <span>{opt.label}</span>
+                <span style={{ fontSize: '0.68rem', opacity: 0.75 }}>{opt.desc}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
 
       <div className="card" style={{ maxWidth: 560 }}>
         <div className="section-title" style={{ marginBottom: '1rem' }}>AI Assistant</div>

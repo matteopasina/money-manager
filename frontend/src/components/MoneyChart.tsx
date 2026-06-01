@@ -27,6 +27,30 @@ const LIGHT_LAYOUT = {
   },
 }
 
+const DARK_LAYOUT = {
+  template: 'plotly_dark' as const,
+  paper_bgcolor: '#1e293b',
+  plot_bgcolor:  '#1e293b',
+  font: { family: 'Inter, -apple-system, sans-serif', color: '#cbd5e1', size: 12 },
+  margin: { t: 30, b: 50, l: 0, r: 0 },
+  xaxis: {
+    gridcolor: '#334155', linecolor: '#334155',
+    tickfont: { color: '#64748b', size: 11 },
+    zerolinecolor: '#334155',
+  },
+  yaxis: {
+    gridcolor: '#334155', linecolor: '#334155',
+    tickfont: { color: '#64748b', size: 11 },
+    zerolinecolor: '#334155',
+  },
+  legend: {
+    bgcolor: 'rgba(30,41,59,0.9)', bordercolor: '#334155', borderwidth: 1,
+    orientation: 'h' as const, yanchor: 'top' as const, y: -0.2,
+    xanchor: 'left' as const, x: 0,
+    font: { color: '#cbd5e1', size: 11 },
+  },
+}
+
 interface Props {
   data: Plotly.Data[]
   layout?: Partial<Plotly.Layout>
@@ -35,12 +59,13 @@ interface Props {
 }
 
 export default function MoneyChart({ data, layout = {}, style, config }: Props) {
+  const base = document.documentElement.dataset.theme === 'dark' ? DARK_LAYOUT : LIGHT_LAYOUT
   const merged = {
-    ...LIGHT_LAYOUT,
+    ...base,
     ...layout,
-    xaxis: { ...LIGHT_LAYOUT.xaxis, ...(layout.xaxis as object || {}) },
-    yaxis: { ...LIGHT_LAYOUT.yaxis, ...(layout.yaxis as object || {}) },
-    legend: { ...LIGHT_LAYOUT.legend, ...(layout.legend as object || {}) },
+    xaxis: { ...base.xaxis, ...(layout.xaxis as object || {}) },
+    yaxis: { ...base.yaxis, ...(layout.yaxis as object || {}) },
+    legend: { ...base.legend, ...(layout.legend as object || {}) },
   }
 
   return (
