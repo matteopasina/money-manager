@@ -134,9 +134,20 @@ def forecast(months_ahead: int = 12):
         raise HTTPException(status_code=422, detail="Not enough balance data for forecasting (need at least 2 monthly snapshots)")
 
     df["date"] = pd.to_datetime(df["date"])
-    monthly = df.groupby(df["date"].dt.to_period("M"))["amount_base"].sum().reset_index()
-    monthly["date"] = monthly["date"].dt.to_timestamp()
-    monthly = monthly.sort_values("date")
+    df = df.sort_values("date")
+
+    # Accounts snapshot at different frequencies (e.g. IB daily, others monthly).
+    # Naively summing every row in a calendar month double/under-counts — instead,
+    # take each account's latest known balance per month and forward-fill gaps,
+    # then sum across accounts (same approach as the Dashboard net-worth chart).
+    df["month"] = df["date"].dt.to_period("M")
+    months = sorted(df["month"].unique())
+    pivot = df.pivot_table(index="month", columns="account_id", values="amount_base", aggfunc="last")
+    pivot = pivot.reindex(months).ffill().fillna(0)
+    monthly = pd.DataFrame({
+        "date": [m.to_timestamp() for m in pivot.index],
+        "amount_base": pivot.sum(axis=1).values,
+    })
 
     x = np.arange(len(monthly))
     y = monthly["amount_base"].values
