@@ -108,6 +108,18 @@ export const api = {
       request<AccountReturnsResult>('/analytics/account-returns'),
   },
 
+  // Interactive Brokers live sync
+  ib: {
+    syncTransactions: (accountId: number) =>
+      request<{ inserted: number; skipped: number }>(
+        `/ib/sync/transactions?account_id=${accountId}`, { method: 'POST' }
+      ),
+    syncNav: (accountId: number) =>
+      request<{ inserted: number; skipped: number }>(
+        `/ib/sync/nav?account_id=${accountId}`, { method: 'POST' }
+      ),
+  },
+
   // Chat
   chat: (body: { messages: ChatMessage[]; model: string; page_context?: string }) =>
     request<{ reply: string; messages: ChatMessage[] }>('/chat', {

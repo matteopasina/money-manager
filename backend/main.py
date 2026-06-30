@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 import database as db
-from routers import accounts, balances, transactions, categories, import_, settings, analytics, chat
+from routers import accounts, balances, transactions, categories, import_, settings, analytics, chat, ib
 
 app = FastAPI(title="Money Manager API")
 
@@ -32,6 +32,7 @@ app.include_router(import_.router)
 app.include_router(settings.router)
 app.include_router(analytics.router)
 app.include_router(chat.router)
+app.include_router(ib.router)
 
 # Initialise DB on startup
 @app.on_event("startup")

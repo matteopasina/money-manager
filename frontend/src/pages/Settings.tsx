@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api/client'
+import type { Account } from '../api/client'
 import LoadingSpinner from '../components/LoadingSpinner'
 import Alert from '../components/Alert'
 import { useTheme, type ThemeMode } from '../ThemeContext'
@@ -58,12 +59,62 @@ export default function Settings() {
   const [saving, setSaving]   = useState(false)
   const [msg, setMsg]         = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
+  // IB state
+  const [ibToken, setIbToken]     = useState('')
+  const [ibTxnQid, setIbTxnQid]   = useState('')
+  const [ibNavQid, setIbNavQid]   = useState('')
+  const [ibAccountId, setIbAccountId] = useState<number | ''>('')
+  const [accounts, setAccounts]   = useState<Account[]>([])
+  const [ibSyncing, setIbSyncing] = useState<'transactions' | 'nav' | null>(null)
+  const [ibSaving, setIbSaving]   = useState(false)
+
   useEffect(() => {
-    api.settings.all().then(s => {
+    Promise.all([
+      api.settings.all(),
+      api.accounts.list(),
+    ]).then(([s, accs]) => {
       setModel(s.llm_model || '')
       setApiKey(s.llm_api_key || '')
+      setIbToken(s.ib_token || '')
+      setIbTxnQid(s.ib_transactions_query_id || '')
+      setIbNavQid(s.ib_nav_query_id || '')
+      setAccounts(accs)
+      if (s.ib_account_id) setIbAccountId(Number(s.ib_account_id))
+      else if (accs.length > 0) setIbAccountId(accs[0].id)
     }).finally(() => setLoading(false))
   }, [])
+
+  async function saveIbSettings() {
+    setIbSaving(true)
+    try {
+      await Promise.all([
+        api.settings.set('ib_token', ibToken.trim()),
+        api.settings.set('ib_transactions_query_id', ibTxnQid.trim()),
+        api.settings.set('ib_nav_query_id', ibNavQid.trim()),
+        api.settings.set('ib_account_id', String(ibAccountId)),
+      ])
+      setMsg({ type: 'success', text: 'IB settings saved.' })
+    } catch (e: unknown) {
+      setMsg({ type: 'error', text: e instanceof Error ? e.message : String(e) })
+    } finally {
+      setIbSaving(false)
+    }
+  }
+
+  async function ibSync(type: 'transactions' | 'nav') {
+    if (!ibAccountId) return setMsg({ type: 'error', text: 'Select an account first.' })
+    setIbSyncing(type)
+    try {
+      const res = type === 'transactions'
+        ? await api.ib.syncTransactions(ibAccountId as number)
+        : await api.ib.syncNav(ibAccountId as number)
+      setMsg({ type: 'success', text: `IB sync done: ${res.inserted} imported, ${res.skipped} skipped.` })
+    } catch (e: unknown) {
+      setMsg({ type: 'error', text: e instanceof Error ? e.message : String(e) })
+    } finally {
+      setIbSyncing(null)
+    }
+  }
 
   async function save() {
     setSaving(true)
@@ -123,6 +174,81 @@ export default function Settings() {
               </button>
             ))}
           </div>
+        </div>
+      </div>
+
+      <div className="card" style={{ maxWidth: 560, marginBottom: '1.5rem' }}>
+        <div className="section-title" style={{ marginBottom: '1rem' }}>Interactive Brokers</div>
+        <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+          Create a Flex Query in IB Account Management → Reports → Flex Queries. Get your token from
+          Reports → Settings → Flex Web Service. Paste the token and query IDs below, then click Sync.
+        </p>
+
+        <div className="form-group">
+          <label>Flex Web Service Token</label>
+          <input
+            type="password"
+            value={ibToken}
+            onChange={e => setIbToken(e.target.value)}
+            placeholder="Your IB Flex token"
+            autoComplete="new-password"
+          />
+        </div>
+
+        <div className="form-group">
+          <label>Transactions Query ID</label>
+          <input
+            value={ibTxnQid}
+            onChange={e => setIbTxnQid(e.target.value)}
+            placeholder="e.g. 123456"
+          />
+          <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+            Flex Query with Cash Transactions + Trades sections.
+          </p>
+        </div>
+
+        <div className="form-group">
+          <label>NAV Query ID</label>
+          <input
+            value={ibNavQid}
+            onChange={e => setIbNavQid(e.target.value)}
+            placeholder="e.g. 789012"
+          />
+          <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+            Flex Query with Equity Summary by Report Date in Base Currency section.
+          </p>
+        </div>
+
+        <div className="form-group">
+          <label>Import into account</label>
+          <select
+            value={ibAccountId}
+            onChange={e => setIbAccountId(Number(e.target.value))}
+          >
+            {accounts.map(a => (
+              <option key={a.id} value={a.id}>{a.name} ({a.currency})</option>
+            ))}
+          </select>
+        </div>
+
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <button className="btn btn-secondary" onClick={saveIbSettings} disabled={ibSaving}>
+            {ibSaving ? 'Saving…' : 'Save IB settings'}
+          </button>
+          <button
+            className="btn btn-primary"
+            onClick={() => ibSync('transactions')}
+            disabled={ibSyncing !== null}
+          >
+            {ibSyncing === 'transactions' ? 'Syncing…' : 'Sync Transactions'}
+          </button>
+          <button
+            className="btn btn-primary"
+            onClick={() => ibSync('nav')}
+            disabled={ibSyncing !== null}
+          >
+            {ibSyncing === 'nav' ? 'Syncing…' : 'Sync NAV'}
+          </button>
         </div>
       </div>
 

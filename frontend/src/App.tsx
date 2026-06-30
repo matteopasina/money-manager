@@ -1,7 +1,7 @@
 import { BrowserRouter, NavLink, Routes, Route, Navigate } from 'react-router-dom'
 import {
   LayoutDashboard, PlusCircle, UploadCloud, Settings,
-  BarChart2, Target, Receipt, Tag, Archive, SlidersHorizontal,
+  BarChart2, Target, Receipt, Tag, Archive, SlidersHorizontal, BookOpen,
 } from 'lucide-react'
 import { ThemeProvider } from './ThemeContext'
 import './styles/globals.css'
@@ -16,6 +16,7 @@ import Predictions from './pages/Predictions'
 import GoalCalculator from './pages/GoalCalculator'
 import Categories from './pages/Categories'
 import SettingsPage from './pages/Settings'
+import Integrations from './pages/IBGuide'
 
 const NAV_OVERVIEW = [
   { to: '/dashboard',    icon: LayoutDashboard, label: 'Dashboard' },
@@ -31,9 +32,10 @@ const NAV_MANAGE = [
 ]
 
 const NAV_SETTINGS = [
-  { to: '/categories', icon: Tag,               label: 'Categories' },
-  { to: '/accounts',   icon: Settings,           label: 'Accounts & FX' },
-  { to: '/settings',   icon: SlidersHorizontal,  label: 'Settings' },
+  { to: '/categories',   icon: Tag,              label: 'Categories' },
+  { to: '/accounts',     icon: Settings,          label: 'Accounts & FX' },
+  { to: '/integrations', icon: BookOpen,          label: 'Integrations' },
+  { to: '/settings',     icon: SlidersHorizontal, label: 'Settings' },
 ]
 
 function NavGroup({ label, items }: { label: string; items: typeof NAV_OVERVIEW }) {
@@ -91,6 +93,7 @@ export default function App() {
               <Route path="/categories"      element={<Categories />} />
               <Route path="/accounts"        element={<Accounts />} />
               <Route path="/settings"        element={<SettingsPage />} />
+              <Route path="/integrations"    element={<Integrations />} />
             </Routes>
           </main>
           <ChatSidebar />
