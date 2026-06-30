@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { api, type TransactionRow, type Account, type Category } from '../api/client'
 import LoadingSpinner from '../components/LoadingSpinner'
 import MoneyChart, { fmtAmount } from '../components/MoneyChart'
@@ -18,9 +19,9 @@ function buildCashFlowTraces(rows: TransactionRow[], transferCats: Set<string>) 
   }
   const months = Object.keys(byMonth).sort()
   return [
-    { x: months, y: months.map(m => byMonth[m].income), type: 'bar' as const, name: 'Income',     marker: { color: '#10b981' } },
-    { x: months, y: months.map(m => byMonth[m].spend),  type: 'bar' as const, name: 'Spending',   marker: { color: '#ef4444' } },
-    { x: months, y: months.map(m => byMonth[m].invest), type: 'bar' as const, name: 'Investment', marker: { color: '#f59e0b' } },
+    { x: months, y: months.map(m => byMonth[m].income), type: 'bar' as const, name: 'Income',     marker: { color: '#3F7A55' } },
+    { x: months, y: months.map(m => byMonth[m].spend),  type: 'bar' as const, name: 'Spending',   marker: { color: '#BE4A33' } },
+    { x: months, y: months.map(m => byMonth[m].invest), type: 'bar' as const, name: 'Invested',   marker: { color: '#B8842B' } },
   ]
 }
 
@@ -37,10 +38,10 @@ function buildCategoryTrace(rows: TransactionRow[], categories: Category[]) {
     labels,
     values: labels.map(l => byCategory[l]),
     type: 'pie' as const,
-    hole: 0.52,
-    marker: { colors: labels.map(l => colorMap[l] ?? '#94a3b8'), line: { color: '#ffffff', width: 2 } },
+    hole: 0.6,
+    marker: { colors: labels.map(l => colorMap[l] ?? '#A88B5C'), line: { color: '#F6F1E7', width: 2 } },
     textinfo: 'label+percent' as const,
-    textfont: { size: 11 },
+    textfont: { size: 11, family: "'Hanken Grotesk', sans-serif" },
     hovertemplate: '%{label}: %{value:,.0f}<extra></extra>',
   }]
 }
@@ -53,6 +54,7 @@ export default function Transactions() {
   const [filters, setFilters]     = useState({ account_id: '', start: '', end: '', search: '', category: '' })
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editCat, setEditCat]     = useState('')
+  const navigate = useNavigate()
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -83,7 +85,7 @@ export default function Transactions() {
 
   function categoryColor(name: string | null) {
     const cat = categories.find(c => c.name === name)
-    return cat?.color ?? '#6b7280'
+    return cat?.color ?? '#6B6253'
   }
 
   const visible = useMemo(() => {
@@ -108,86 +110,82 @@ export default function Transactions() {
   return (
     <div>
       <div className="page-header">
-        <h1>Transactions</h1>
-        <p>Browse, search, and categorise your transactions</p>
+        <div>
+          <h1>Transactions</h1>
+          <p>Browse, search and categorise your activity</p>
+        </div>
+        <button className="btn btn-primary" onClick={() => navigate('/import')}>↥ Import statement</button>
       </div>
 
-      <div className="card" style={{ marginBottom: '1rem' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 2fr', gap: '0.75rem' }}>
-          <div className="form-group" style={{ margin: 0 }}>
-            <label>Account</label>
-            <select value={filters.account_id} onChange={e => setFilters(f => ({ ...f, account_id: e.target.value }))}>
-              <option value="">All accounts</option>
-              {accounts.map(a => <option key={a.id} value={String(a.id)}>{a.name}</option>)}
-            </select>
-          </div>
-          <div className="form-group" style={{ margin: 0 }}>
-            <label>Category</label>
-            <select value={filters.category} onChange={e => setFilters(f => ({ ...f, category: e.target.value }))}>
-              <option value="">All categories</option>
-              {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-            </select>
-          </div>
-          <div className="form-group" style={{ margin: 0 }}>
-            <label>From</label>
-            <input type="date" value={filters.start} onChange={e => setFilters(f => ({ ...f, start: e.target.value }))} />
-          </div>
-          <div className="form-group" style={{ margin: 0 }}>
-            <label>To</label>
-            <input type="date" value={filters.end} onChange={e => setFilters(f => ({ ...f, end: e.target.value }))} />
-          </div>
-          <div className="form-group" style={{ margin: 0 }}>
-            <label>Search</label>
-            <input
-              placeholder="Description, reference, category…"
-              value={filters.search}
-              onChange={e => setFilters(f => ({ ...f, search: e.target.value }))}
-            />
-          </div>
+      <div className="filter-bar" style={{ marginBottom: '18px' }}>
+        <div className="filter-pill">
+          <select value={filters.account_id} onChange={e => setFilters(f => ({ ...f, account_id: e.target.value }))}>
+            <option value="">All accounts</option>
+            {accounts.map(a => <option key={a.id} value={String(a.id)}>{a.name}</option>)}
+          </select>
+        </div>
+        <div className="filter-pill">
+          <select value={filters.category} onChange={e => setFilters(f => ({ ...f, category: e.target.value }))}>
+            <option value="">All categories</option>
+            {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+          </select>
+        </div>
+        <div className="filter-pill">
+          <input type="date" value={filters.start} onChange={e => setFilters(f => ({ ...f, start: e.target.value }))} style={{ width: 'auto' }} />
+          <span style={{ color: 'var(--ink-ghost)' }}>–</span>
+          <input type="date" value={filters.end} onChange={e => setFilters(f => ({ ...f, end: e.target.value }))} style={{ width: 'auto' }} />
+        </div>
+        <div className="filter-search">
+          <span className="filter-search-icon">⌕</span>
+          <input
+            placeholder="Search description, reference or category…"
+            value={filters.search}
+            onChange={e => setFilters(f => ({ ...f, search: e.target.value }))}
+          />
         </div>
       </div>
 
-      <div className="metrics-grid" style={{ marginBottom: '1rem' }}>
+      <div className="metrics-grid" style={{ marginBottom: '18px' }}>
         <div className="card">
           <div className="metric-label">Transactions</div>
-          <div className="metric-value" style={{ fontSize: '1.4rem' }}>{visible.length.toLocaleString()}</div>
+          <div className="metric-value" style={{ marginTop: '8px' }}>{visible.length.toLocaleString()}</div>
         </div>
         <div className="card">
           <div className="metric-label">Income</div>
-          <div className="metric-value" style={{ fontSize: '1.4rem', color: 'var(--accent-green)' }}>
+          <div className="metric-value" style={{ marginTop: '8px', color: 'var(--gain)' }}>
             +{fmtAmount(totalIncome)}
           </div>
         </div>
         <div className="card">
           <div className="metric-label">Spending</div>
-          <div className="metric-value" style={{ fontSize: '1.4rem', color: 'var(--danger)' }}>
+          <div className="metric-value" style={{ marginTop: '8px', color: 'var(--loss)' }}>
             {fmtAmount(totalSpend)}
           </div>
         </div>
         <div className="card">
-          <div className="metric-label">Investment</div>
-          <div className="metric-value" style={{ fontSize: '1.4rem', color: 'var(--accent-blue, #60a5fa)' }}>
+          <div className="metric-label">Invested</div>
+          <div className="metric-value" style={{ marginTop: '8px', color: 'var(--accent)' }}>
             {fmtAmount(totalInvest)}
           </div>
         </div>
       </div>
 
       {visible.length > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '1.5rem', marginBottom: '1rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '18px', marginBottom: '18px' }}>
           <div className="card">
-            <div className="section-title" style={{ marginBottom: '0.5rem' }}>Monthly Cash Flow</div>
+            <div className="section-title">Monthly Cash Flow</div>
             <MoneyChart
               data={cashFlowTraces}
               layout={{ barmode: 'group', yaxis: { tickformat: ',.0f' }, showlegend: true }}
-              style={{ height: 240 }}
+              style={{ height: 260 }}
             />
           </div>
           <div className="card">
-            <div className="section-title" style={{ marginBottom: '0.5rem' }}>Outflows by Category</div>
+            <div className="section-title">Outflows by Category</div>
             <MoneyChart
               data={categoryTraces}
               layout={{ showlegend: false, margin: { t: 10, b: 10, l: 10, r: 10 } }}
-              style={{ height: 240 }}
+              style={{ height: 260 }}
             />
           </div>
         </div>
@@ -211,18 +209,18 @@ export default function Transactions() {
             <tbody>
               {visible.map(r => (
                 <tr key={r.id}>
-                  <td style={{ whiteSpace: 'nowrap', color: 'var(--text-muted)', fontSize: '0.78rem' }}>{r.date}</td>
-                  <td style={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.description}</td>
-                  <td style={{ color: 'var(--text-muted)', fontSize: '0.75rem', maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.reference}</td>
+                  <td style={{ whiteSpace: 'nowrap', color: 'var(--ink-faint)', fontSize: '12px', fontVariantNumeric: 'tabular-nums' }}>{r.date}</td>
+                  <td style={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500, color: 'var(--ink)' }}>{r.description}</td>
+                  <td style={{ color: 'var(--ink-ghost)', fontSize: '11.5px', maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.reference}</td>
                   <td style={{
                     textAlign: 'right',
                     fontVariantNumeric: 'tabular-nums',
                     fontWeight: 600,
-                    color: r.amount < 0 ? 'var(--danger)' : 'var(--accent-green)',
+                    color: r.amount < 0 ? 'var(--ink)' : 'var(--gain)',
                   }}>
                     {r.amount >= 0 ? '+' : ''}{fmtAmount(r.amount)}
                   </td>
-                  <td style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{r.account}</td>
+                  <td style={{ fontSize: '12px', color: 'var(--ink-muted)' }}>{r.account}</td>
                   <td>
                     {editingId === r.id ? (
                       <div style={{ display: 'flex', gap: 4 }}>
@@ -237,10 +235,9 @@ export default function Transactions() {
                       <span
                         className="badge"
                         style={{
-                          background: r.category ? `${categoryColor(r.category)}22` : 'rgba(107,114,128,0.15)',
-                          color: r.category ? categoryColor(r.category) : '#6b7b94',
+                          background: r.category ? `${categoryColor(r.category)}22` : 'var(--bg-chip)',
+                          color: r.category ? categoryColor(r.category) : 'var(--ink-muted)',
                           cursor: 'pointer',
-                          border: `1px solid ${r.category ? `${categoryColor(r.category)}44` : 'transparent'}`,
                         }}
                         onClick={() => { setEditingId(r.id); setEditCat(r.category ?? '') }}
                         title="Click to edit category"
@@ -252,7 +249,7 @@ export default function Transactions() {
                 </tr>
               ))}
               {!visible.length && (
-                <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '2rem' }}>No transactions found</td></tr>
+                <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--ink-faint)', padding: '2rem' }}>No transactions found</td></tr>
               )}
             </tbody>
           </table>

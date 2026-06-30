@@ -3,10 +3,10 @@ export const CURRENCIES = ['EUR', 'USD', 'GBP', 'CHF', 'CZK', 'PLN', 'SEK', 'NOK
 export const ACCOUNT_TYPES = ['liquid', 'stocks', 'crypto', 'pension', 'real estate', 'other']
 
 export const ACCOUNT_TYPE_BADGE: Record<string, { bg: string; color: string }> = {
-  liquid:        { bg: '#dbeafe', color: '#1d4ed8' },
-  stocks:        { bg: '#dcfce7', color: '#15803d' },
-  crypto:        { bg: '#fef3c7', color: '#b45309' },
-  pension:       { bg: '#f3e8ff', color: '#7e22ce' },
-  'real estate': { bg: '#fce7f3', color: '#9d174d' },
-  other:         { bg: '#f1f5f9', color: '#475569' },
+  liquid:        { bg: '#A88B5C22', color: '#8a6a3a' },
+  stocks:        { bg: '#B8842B22', color: '#8a5a12' },
+  crypto:        { bg: '#C97B4A22', color: '#9a5a32' },
+  pension:       { bg: '#6E5A3E22', color: '#5a4a30' },
+  'real estate': { bg: '#3F7A5522', color: '#2f5a3e' },
+  other:         { bg: '#92887322', color: '#6B6253' },
 }

@@ -3,51 +3,53 @@ import PlotlyImport from 'react-plotly.js'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const Plot = ((PlotlyImport as any).default ?? PlotlyImport) as typeof PlotlyImport
 
+const FONT_FAMILY = "'Hanken Grotesk', -apple-system, sans-serif"
+
 const LIGHT_LAYOUT = {
   template: 'plotly_white' as const,
-  paper_bgcolor: '#ffffff',
-  plot_bgcolor:  '#ffffff',
-  font: { family: 'Inter, -apple-system, sans-serif', color: '#334155', size: 12 },
-  margin: { t: 30, b: 50, l: 0, r: 0 },
+  paper_bgcolor: 'rgba(0,0,0,0)',
+  plot_bgcolor:  'rgba(0,0,0,0)',
+  font: { family: FONT_FAMILY, color: '#A89D88', size: 10.5 },
+  margin: { t: 36, b: 50, l: 0, r: 0 },
   xaxis: {
-    gridcolor: '#f1f5f9', linecolor: '#e2e8f0',
-    tickfont: { color: '#64748b', size: 11 },
-    zerolinecolor: '#e2e8f0',
+    gridcolor: '#E7DECC', linecolor: '#E7DECC',
+    tickfont: { color: '#A89D88', size: 10.5, family: FONT_FAMILY },
+    zerolinecolor: '#E7DECC',
   },
   yaxis: {
-    gridcolor: '#f1f5f9', linecolor: '#e2e8f0',
-    tickfont: { color: '#64748b', size: 11 },
-    zerolinecolor: '#e2e8f0',
+    gridcolor: '#E7DECC', linecolor: '#E7DECC',
+    tickfont: { color: '#A89D88', size: 10.5, family: FONT_FAMILY },
+    zerolinecolor: '#E7DECC',
   },
   legend: {
-    bgcolor: 'rgba(255,255,255,0.9)', bordercolor: '#e2e8f0', borderwidth: 1,
+    bgcolor: 'rgba(246,241,231,0.9)', bordercolor: '#E2D8C5', borderwidth: 1,
     orientation: 'h' as const, yanchor: 'top' as const, y: -0.2,
     xanchor: 'left' as const, x: 0,
-    font: { color: '#334155', size: 11 },
+    font: { color: '#544B3D', size: 11, family: FONT_FAMILY },
   },
 }
 
 const DARK_LAYOUT = {
   template: 'plotly_dark' as const,
-  paper_bgcolor: '#1e293b',
-  plot_bgcolor:  '#1e293b',
-  font: { family: 'Inter, -apple-system, sans-serif', color: '#cbd5e1', size: 12 },
-  margin: { t: 30, b: 50, l: 0, r: 0 },
+  paper_bgcolor: 'rgba(0,0,0,0)',
+  plot_bgcolor:  'rgba(0,0,0,0)',
+  font: { family: FONT_FAMILY, color: '#8C8068', size: 10.5 },
+  margin: { t: 36, b: 50, l: 0, r: 0 },
   xaxis: {
-    gridcolor: '#334155', linecolor: '#334155',
-    tickfont: { color: '#64748b', size: 11 },
-    zerolinecolor: '#334155',
+    gridcolor: '#3A3328', linecolor: '#3A3328',
+    tickfont: { color: '#8C8068', size: 10.5, family: FONT_FAMILY },
+    zerolinecolor: '#3A3328',
   },
   yaxis: {
-    gridcolor: '#334155', linecolor: '#334155',
-    tickfont: { color: '#64748b', size: 11 },
-    zerolinecolor: '#334155',
+    gridcolor: '#3A3328', linecolor: '#3A3328',
+    tickfont: { color: '#8C8068', size: 10.5, family: FONT_FAMILY },
+    zerolinecolor: '#3A3328',
   },
   legend: {
-    bgcolor: 'rgba(30,41,59,0.9)', bordercolor: '#334155', borderwidth: 1,
+    bgcolor: 'rgba(36,32,25,0.9)', bordercolor: '#3A3328', borderwidth: 1,
     orientation: 'h' as const, yanchor: 'top' as const, y: -0.2,
     xanchor: 'left' as const, x: 0,
-    font: { color: '#cbd5e1', size: 11 },
+    font: { color: '#D9CFBC', size: 11, family: FONT_FAMILY },
   },
 }
 
@@ -96,10 +98,11 @@ export const RANGE_XAXIS: Partial<Plotly.Layout['xaxis']> = {
   rangeslider: { visible: false } as Plotly.Layout['xaxis']['rangeslider'],
 }
 
+// Warm tonal "Meridian" categorical palette — gold, forest, umber, tan, clay, repeating.
 // eslint-disable-next-line react-refresh/only-export-components
 export const ACCOUNT_PALETTE = [
-  '#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6',
-  '#06b6d4','#f97316','#ec4899','#14b8a6','#eab308',
+  '#B8842B', '#3F7A55', '#6E5A3E', '#A88B5C', '#C97B4A',
+  '#8C9A6B', '#9A6B4A', '#7A8C6B', '#B0915C', '#5C7A6E',
 ]
 
 // eslint-disable-next-line react-refresh/only-export-components

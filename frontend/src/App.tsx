@@ -1,9 +1,11 @@
+import { useEffect, useState } from 'react'
 import { BrowserRouter, NavLink, Routes, Route, Navigate } from 'react-router-dom'
 import {
   LayoutDashboard, PlusCircle, UploadCloud, Settings,
   BarChart2, Target, Receipt, Tag, Archive, SlidersHorizontal, BookOpen,
 } from 'lucide-react'
 import { ThemeProvider } from './ThemeContext'
+import { api } from './api/client'
 import './styles/globals.css'
 import ChatSidebar from './components/ChatSidebar'
 import Dashboard from './pages/Dashboard'
@@ -40,7 +42,7 @@ const NAV_SETTINGS = [
 
 function NavGroup({ label, items }: { label: string; items: typeof NAV_OVERVIEW }) {
   return (
-    <>
+    <div className="nav-group">
       <div className="nav-section-label">{label}</div>
       {items.map(({ to, icon: Icon, label: l }) => (
         <NavLink
@@ -48,36 +50,44 @@ function NavGroup({ label, items }: { label: string; items: typeof NAV_OVERVIEW 
           to={to}
           className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}
         >
-          <Icon size={15} />
+          <span className="nav-link-dot" />
           {l}
+          <Icon size={14} style={{ marginLeft: 'auto', opacity: 0.6, flexShrink: 0 }} />
         </NavLink>
       ))}
-    </>
+    </div>
   )
 }
 
-const SidebarLogo = () => (
-  <svg viewBox="0 0 32 32" width="20" height="20" style={{ flexShrink: 0 }}>
-    <rect width="32" height="32" rx="7" fill="#0f172a"/>
-    <rect x="5" y="20" width="5" height="7" rx="1.5" fill="#3b82f6"/>
-    <rect x="13" y="14" width="5" height="13" rx="1.5" fill="#3b82f6"/>
-    <rect x="21" y="8" width="5" height="19" rx="1.5" fill="#10b981"/>
-  </svg>
-)
-
 export default function App() {
+  const [baseCurrency, setBaseCurrency] = useState('EUR')
+
+  useEffect(() => {
+    api.settings.all().then(s => setBaseCurrency(s.base_currency || 'EUR')).catch(() => {})
+  }, [])
+
   return (
     <ThemeProvider>
       <BrowserRouter>
         <div className="layout">
           <nav className="sidebar">
             <div className="nav-brand">
-              <SidebarLogo />
-              Money Manager
+              <div className="nav-brand-mark">m</div>
+              <div className="nav-brand-word">Money Manager</div>
             </div>
             <NavGroup label="Overview" items={NAV_OVERVIEW} />
             <NavGroup label="Manage" items={NAV_MANAGE} />
             <NavGroup label="Settings" items={NAV_SETTINGS} />
+
+            <div className="sidebar-user">
+              <div className="sidebar-user-card">
+                <div className="sidebar-user-avatar">M</div>
+                <div style={{ minWidth: 0 }}>
+                  <div className="sidebar-user-name">Personal account</div>
+                  <div className="sidebar-user-sub">Base currency · {baseCurrency}</div>
+                </div>
+              </div>
+            </div>
           </nav>
 
           <main className="main-content">
