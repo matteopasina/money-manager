@@ -27,9 +27,10 @@ cd frontend && npm install && npm run dev
 # Production build (outputs to backend/static/dist/, served by FastAPI)
 cd frontend && npm run build
 
-# Docker
+# Docker — mount the .key file too: secret settings are encrypted at rest and
+# unreadable without it (auto-created next to the DB on first run)
 docker build -t money-manager .
-docker run -p 8000:8000 -v $(pwd)/finances.db:/app/finances.db money-manager
+docker run -p 8000:8000 -v $(pwd)/finances.db:/app/finances.db -v $(pwd)/finances.db.key:/app/finances.db.key money-manager
 ```
 
 ## Running tests
@@ -76,3 +77,4 @@ Configured via app settings (`llm_model`, `llm_api_key`). Uses LiteLLM so any pr
 - Non-base-currency accounts store both native amount and base-currency equivalent; FX rates are manually maintained in `fx_rates`
 - FX rates must be `> 0` — the API enforces this with a Pydantic validator
 - `withdrawal_rate_pct` in the FIRE calculator must be `> 0` — validated at the API layer
+- Credential settings (`db.SECRET_SETTINGS`: EB private key, Binance secret, IB token, LLM key) are encrypted at rest (Fernet key in `finances.db.key`, 0600) and masked as `__secret__` by `GET /api/settings` — they are write-only from the browser. When adding a new credential setting, add it to `SECRET_SETTINGS` and follow the write-only pattern in Connections.tsx
