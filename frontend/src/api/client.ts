@@ -1,5 +1,9 @@
 const BASE = '/api'
 
+// Placeholder the backend returns for saved secrets (API keys, tokens, private
+// keys) instead of their real values — secrets are write-only from the browser.
+export const SECRET_MASK = '__secret__'
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(BASE + path, {
     headers: { 'Content-Type': 'application/json', ...init?.headers },
@@ -108,17 +112,21 @@ export const api = {
       request<AccountReturnsResult>('/analytics/account-returns'),
   },
 
-  // BBVA live sync via Saltedge
+  // BBVA live sync via Enable Banking
   bbva: {
-    createCustomer: () =>
-      request<{ customer_id: string; note?: string }>('/bbva/create-customer', { method: 'POST' }),
-    connect: (returnTo?: string) =>
-      request<{ connect_url: string }>(
-        `/bbva/connect${returnTo ? `?return_to=${encodeURIComponent(returnTo)}` : ''}`,
+    aspsps: (country = 'IT', search = 'bbva') =>
+      request<{ name: string; country: string }[]>(`/bbva/aspsps?country=${country}&search=${encodeURIComponent(search)}`),
+    connect: (redirectUri?: string) =>
+      request<{ url: string }>(
+        `/bbva/connect${redirectUri ? `?redirect_uri=${encodeURIComponent(redirectUri)}` : ''}`,
         { method: 'POST' }
       ),
+    exchangeCode: (code: string) =>
+      request<{ session_id: string; accounts: { uid: string; name: string; currency: string }[] }>(
+        `/bbva/exchange-code?code=${encodeURIComponent(code)}`, { method: 'POST' }
+      ),
     linkStatus: () =>
-      request<{ status: string; connection_id?: string; accounts?: { id: string; name: string; currency: string }[] }>('/bbva/link-status'),
+      request<{ status: string; account_uid?: string; account_count?: number }>('/bbva/link-status'),
     syncTransactions: (accountId: number, days = 90) =>
       request<{ inserted: number; skipped: number }>(
         `/bbva/sync/transactions?account_id=${accountId}&days=${days}`, { method: 'POST' }
@@ -126,6 +134,31 @@ export const api = {
     syncBalances: (accountId: number) =>
       request<{ inserted: number; skipped: number }>(
         `/bbva/sync/balances?account_id=${accountId}`, { method: 'POST' }
+      ),
+  },
+
+  // Revolut live sync via Enable Banking
+  revolut: {
+    aspsps: (country = 'LT', search = 'revolut') =>
+      request<{ name: string; country: string }[]>(`/revolut/aspsps?country=${country}&search=${encodeURIComponent(search)}`),
+    connect: (redirectUri?: string) =>
+      request<{ url: string }>(
+        `/revolut/connect${redirectUri ? `?redirect_uri=${encodeURIComponent(redirectUri)}` : ''}`,
+        { method: 'POST' }
+      ),
+    exchangeCode: (code: string) =>
+      request<{ session_id: string; accounts: { uid: string; name: string; currency: string }[] }>(
+        `/revolut/exchange-code?code=${encodeURIComponent(code)}`, { method: 'POST' }
+      ),
+    linkStatus: () =>
+      request<{ status: string; accounts?: { uid: string; name: string; currency: string }[] }>('/revolut/link-status'),
+    syncTransactions: (accountId: number, days = 90) =>
+      request<{ inserted: number; skipped: number }>(
+        `/revolut/sync/transactions?account_id=${accountId}&days=${days}`, { method: 'POST' }
+      ),
+    syncBalances: (accountId: number) =>
+      request<{ inserted: number; skipped: number }>(
+        `/revolut/sync/balances?account_id=${accountId}`, { method: 'POST' }
       ),
   },
 
@@ -151,6 +184,16 @@ export const api = {
       request<{ inserted: number; skipped: number }>(
         `/ib/sync/nav?account_id=${accountId}`, { method: 'POST' }
       ),
+  },
+
+  // Automatic sync (scheduler status + controls)
+  sync: {
+    status: () => request<SyncStatus>('/sync/status'),
+    runNow: () => request<SyncStatus>('/sync/run-now', { method: 'POST' }),
+    updateSettings: (enabled: boolean, intervalHours: number) =>
+      request<void>('/sync/settings', {
+        method: 'PUT', body: JSON.stringify({ enabled, interval_hours: intervalHours }),
+      }),
   },
 
   // Chat
@@ -292,6 +335,24 @@ export interface AccountReturnsResult {
   }[]
   weighted_annual_return_pct: number
   currency: string
+}
+
+export interface SyncIntegrationStatus {
+  id: string
+  name: string
+  configured: boolean
+  last_status: 'success' | 'error' | null
+  last_message: string | null
+  last_run_at: string | null
+  last_success_at: string | null
+  due: boolean
+}
+
+export interface SyncStatus {
+  enabled: boolean
+  interval_hours: number
+  integrations: SyncIntegrationStatus[]
+  results?: { id: string; name: string; result: string; message?: string }[]
 }
 
 export interface ChatMessage {

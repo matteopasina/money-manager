@@ -10,14 +10,15 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 import database as db
-from routers import accounts, balances, transactions, categories, import_, settings, analytics, chat, ib, binance, bbva
+import scheduler
+from routers import accounts, balances, transactions, categories, import_, settings, analytics, chat, ib, binance, bbva, revolut, sync
 
 app = FastAPI(title="Money Manager API")
 
 # Allow Vite dev server to talk to this backend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=["http://localhost:5173", "https://localhost:5173", "http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -35,11 +36,19 @@ app.include_router(chat.router)
 app.include_router(ib.router)
 app.include_router(binance.router)
 app.include_router(bbva.router)
+app.include_router(revolut.router)
+app.include_router(sync.router)
 
 # Initialise DB on startup
 @app.on_event("startup")
 def startup():
     db.init_db()
+    scheduler.init_scheduler()
+
+
+@app.on_event("shutdown")
+def shutdown():
+    scheduler.shutdown_scheduler()
 
 
 # Serve React SPA in production (after `npm run build`)
