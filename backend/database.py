@@ -490,6 +490,8 @@ _DEFAULT_RULES: list[tuple[str, str, str, int]] = [
     # Shopping
     ("amazon",      "Shopping", "description", 0),
     ("zara",        "Shopping", "description", 0),
+    # Transfers between own accounts (not real income/spend)
+    ("deposits/withdrawals", "Transfer", "reference", 0),
 ]
 
 
