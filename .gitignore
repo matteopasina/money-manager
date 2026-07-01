@@ -1,5 +1,6 @@
-# Database
+# Database + settings-encryption key (never commit either)
 finances.db
+*.db.key
 
 # Virtual environment
 .venv/

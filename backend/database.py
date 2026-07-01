@@ -3,9 +3,60 @@ import os
 from datetime import datetime, timezone
 from typing import Optional
 
+from cryptography.fernet import Fernet, InvalidToken
+
 from domain import Account, Balance, Transaction, Category, KeywordRule
 
 DB_PATH = os.environ.get("DB_PATH", "finances.db")
+
+# ── Secret settings encryption ─────────────────────────────────────────────────
+# These settings hold credentials. They are encrypted at rest (Fernet) with a
+# key kept in a separate 0600 file next to the DB, so a copied finances.db alone
+# is useless. They are also masked by the settings API — never sent to the
+# browser (see routers/settings.py).
+
+SECRET_SETTINGS = {
+    "enablebanking_private_key",
+    "binance_api_secret",
+    "ib_token",
+    "llm_api_key",
+}
+
+SECRET_MASK = "__secret__"  # placeholder the API returns instead of the value
+
+_ENC_PREFIX = "enc:"
+_fernet: Optional[Fernet] = None
+
+
+def _get_fernet() -> Fernet:
+    """Load (or create on first use) the encryption key stored beside the DB."""
+    global _fernet
+    if _fernet is None:
+        key_path = DB_PATH + ".key"
+        if os.path.exists(key_path):
+            with open(key_path, "rb") as f:
+                key = f.read().strip()
+        else:
+            key = Fernet.generate_key()
+            fd = os.open(key_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "wb") as f:
+                f.write(key)
+        _fernet = Fernet(key)
+    return _fernet
+
+
+def _encrypt_secret(value: str) -> str:
+    return _ENC_PREFIX + _get_fernet().encrypt(value.encode()).decode()
+
+
+def _decrypt_secret(stored: str) -> str:
+    if not stored.startswith(_ENC_PREFIX):
+        return stored  # legacy plaintext (migrated on startup)
+    try:
+        return _get_fernet().decrypt(stored[len(_ENC_PREFIX):].encode()).decode()
+    except (InvalidToken, ValueError):
+        # Key file lost/replaced — treat as unset rather than crash
+        return ""
 
 DEFAULT_CATEGORIES = [
     ("Groceries",     "#22c55e", False, False),
@@ -26,6 +77,8 @@ DEFAULT_CATEGORIES = [
 
 DEFAULT_SETTINGS = {
     "base_currency": "EUR",
+    "auto_sync_enabled": "true",
+    "auto_sync_interval_hours": "24",
 }
 
 
@@ -101,6 +154,14 @@ def init_db() -> None:
                 key   TEXT PRIMARY KEY,
                 value TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS sync_log (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                integration TEXT NOT NULL,
+                status      TEXT NOT NULL,   -- 'success' | 'error'
+                message     TEXT,
+                ran_at      TEXT NOT NULL
+            );
         """)
         _migrate(conn)
         _seed(conn)
@@ -149,6 +210,15 @@ def _migrate(conn: sqlite3.Connection) -> None:
             FROM snapshots
         """)
 
+    # app_settings: encrypt any secret values still stored in plaintext
+    for key in SECRET_SETTINGS:
+        row = conn.execute("SELECT value FROM app_settings WHERE key = ?", (key,)).fetchone()
+        if row and row[0] and not row[0].startswith(_ENC_PREFIX):
+            conn.execute(
+                "UPDATE app_settings SET value = ? WHERE key = ?",
+                (_encrypt_secret(row[0]), key),
+            )
+
 
 def _seed(conn: sqlite3.Connection) -> None:
     for name, color, is_income, is_transfer in DEFAULT_CATEGORIES:
@@ -168,10 +238,15 @@ def _seed(conn: sqlite3.Connection) -> None:
 def get_setting(key: str, default: str = "") -> str:
     with get_connection() as conn:
         row = conn.execute("SELECT value FROM app_settings WHERE key = ?", (key,)).fetchone()
-    return row["value"] if row else default
+    if row is None:
+        return default
+    value = row["value"]
+    return _decrypt_secret(value) if key in SECRET_SETTINGS else value
 
 
 def set_setting(key: str, value: str) -> None:
+    if key in SECRET_SETTINGS and value:
+        value = _encrypt_secret(value)
     with get_connection() as conn:
         conn.execute(
             "INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -181,6 +256,32 @@ def set_setting(key: str, value: str) -> None:
 
 def get_base_currency() -> str:
     return get_setting("base_currency", "EUR")
+
+
+# ── Sync log (auto-sync cache + status) ────────────────────────────────────────
+
+def record_sync(integration: str, status: str, message: str = "") -> None:
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT INTO sync_log (integration, status, message, ran_at) VALUES (?, ?, ?, ?)",
+            (integration, status, message, datetime.now(timezone.utc).isoformat()),
+        )
+
+
+def get_last_sync(integration: str, status: Optional[str] = None) -> Optional[sqlite3.Row]:
+    """Most recent sync_log row for an integration, optionally filtered by status.
+
+    The auto-sync scheduler uses the last *success* as its cache marker: a sync
+    is only due when `now - last success >= interval`.
+    """
+    query = "SELECT * FROM sync_log WHERE integration = ?"
+    params: list = [integration]
+    if status:
+        query += " AND status = ?"
+        params.append(status)
+    query += " ORDER BY id DESC LIMIT 1"
+    with get_connection() as conn:
+        return conn.execute(query, params).fetchone()
 
 
 # ── FX rates ───────────────────────────────────────────────────────────────────

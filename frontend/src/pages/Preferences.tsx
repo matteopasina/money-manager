@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api } from '../api/client'
+import { api, SECRET_MASK } from '../api/client'
 import LoadingSpinner from '../components/LoadingSpinner'
 import Alert from '../components/Alert'
 import { useTheme, type ThemeMode } from '../ThemeContext'
@@ -54,14 +54,16 @@ const MODEL_PRESETS = [
 export default function Preferences() {
   const [loading, setLoading] = useState(true)
   const [model, setModel]     = useState('')
-  const [apiKey, setApiKey]   = useState('')
+  const [apiKey, setApiKey]   = useState('')          // write-only: blank unless replacing
+  const [apiKeySaved, setApiKeySaved] = useState(false) // a key is stored server-side
   const [saving, setSaving]   = useState(false)
   const [msg, setMsg]         = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   useEffect(() => {
     api.settings.all().then(s => {
       setModel(s.llm_model || '')
-      setApiKey(s.llm_api_key || '')
+      // Secrets come back masked; the input stays blank and typing replaces the stored key.
+      setApiKeySaved(s.llm_api_key === SECRET_MASK)
     }).finally(() => setLoading(false))
   }, [])
 
@@ -69,10 +71,11 @@ export default function Preferences() {
     setSaving(true)
     setMsg(null)
     try {
-      await Promise.all([
-        api.settings.set('llm_model', model.trim()),
-        api.settings.set('llm_api_key', apiKey.trim()),
-      ])
+      const writes = [api.settings.set('llm_model', model.trim())]
+      // Write-only secret: only send when the user typed a new one
+      if (apiKey.trim()) writes.push(api.settings.set('llm_api_key', apiKey.trim()))
+      await Promise.all(writes)
+      if (apiKey.trim()) { setApiKeySaved(true); setApiKey('') }
       setMsg({ type: 'success', text: 'Settings saved.' })
     } catch (e: unknown) {
       setMsg({ type: 'error', text: e instanceof Error ? e.message : String(e) })
@@ -178,11 +181,11 @@ export default function Preferences() {
             type="password"
             value={apiKey}
             onChange={e => setApiKey(e.target.value)}
-            placeholder="sk-… or your provider's key"
+            placeholder={apiKeySaved ? '•••••••• saved — paste a new key to replace' : "sk-… or your provider's key"}
             autoComplete="new-password"
           />
           <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-            Stored server-side only — never sent to the browser.
+            Encrypted at rest, stored server-side only — never sent to the browser.
             For Ollama leave this blank.
           </p>
         </div>
