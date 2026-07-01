@@ -60,13 +60,6 @@ export default function Predictions() {
 
   return (
     <div>
-      <div className="page-header">
-        <div>
-          <h1>Predictions</h1>
-          <p>Trend forecast of your net worth, based on balance history</p>
-        </div>
-      </div>
-
       <div className="card" style={{ marginBottom: '18px', display: 'flex', alignItems: 'center', gap: '22px', padding: '18px 22px' }}>
         <span style={{ fontSize: 13, color: 'var(--ink-muted)', fontWeight: 500, whiteSpace: 'nowrap' }}>Months to forecast</span>
         <input
@@ -180,7 +173,7 @@ export default function Predictions() {
 
                 <div style={{ margin: '14px 0 4px', padding: '13px 16px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 12, fontSize: 13, color: 'var(--ink-soft)', lineHeight: 1.5 }}>
                   Your portfolio earns <strong style={{ color: returnColor(returns.weighted_annual_return_pct) }}>{returns.weighted_annual_return_pct >= 0 ? '+' : ''}{returns.weighted_annual_return_pct.toFixed(1)}%/yr</strong> organically (weighted by balance, cash-flow adjusted).
-                  {' '}The Goal Calculator uses this rate as the default for compound projections.
+                  {' '}The Goal Planner tab uses this rate as the default for compound projections.
                 </div>
               </div>
             </>

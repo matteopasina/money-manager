@@ -1,43 +1,42 @@
 import { useEffect, useState } from 'react'
 import { BrowserRouter, NavLink, Routes, Route, Navigate } from 'react-router-dom'
 import {
-  LayoutDashboard, PlusCircle, UploadCloud, Settings,
-  BarChart2, Target, Receipt, Tag, Archive, SlidersHorizontal, BookOpen,
+  LayoutDashboard, Receipt, Wallet, UploadCloud,
+  TrendingUp, Tag, Settings, Plug, SlidersHorizontal,
 } from 'lucide-react'
 import { ThemeProvider } from './ThemeContext'
 import { api } from './api/client'
 import './styles/globals.css'
 import ChatSidebar from './components/ChatSidebar'
 import Dashboard from './pages/Dashboard'
-import AddBalance from './pages/AddBalance'
 import Transactions from './pages/Transactions'
-import Accounts from './pages/Accounts'
+import Balances from './pages/Balances'
 import Import from './pages/Import'
-import ManageBalances from './pages/ManageBalances'
-import Predictions from './pages/Predictions'
-import GoalCalculator from './pages/GoalCalculator'
+import Projections from './pages/Projections'
+import Accounts from './pages/Accounts'
 import Categories from './pages/Categories'
-import SettingsPage from './pages/Settings'
-import Integrations from './pages/IBGuide'
+import Connections from './pages/Connections'
+import Preferences from './pages/Preferences'
 
 const NAV_OVERVIEW = [
   { to: '/dashboard',    icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/transactions', icon: Receipt,         label: 'Transactions' },
-  { to: '/predictions',  icon: BarChart2,       label: 'Predictions' },
-  { to: '/goal-calculator', icon: Target,       label: 'Goal Calculator' },
 ]
 
-const NAV_MANAGE = [
-  { to: '/add-balance',     icon: PlusCircle,  label: 'Add Balance' },
-  { to: '/import',          icon: UploadCloud, label: 'Import' },
-  { to: '/manage-balances', icon: Archive,     label: 'Manage Balances' },
+const NAV_ACTIVITY = [
+  { to: '/transactions', icon: Receipt,     label: 'Transactions' },
+  { to: '/balances',     icon: Wallet,      label: 'Balances' },
+  { to: '/import',       icon: UploadCloud, label: 'Import' },
 ]
 
-const NAV_SETTINGS = [
-  { to: '/categories',   icon: Tag,              label: 'Categories' },
+const NAV_PLAN = [
+  { to: '/projections',  icon: TrendingUp, label: 'Projections' },
+]
+
+const NAV_SETUP = [
   { to: '/accounts',     icon: Settings,          label: 'Accounts & FX' },
-  { to: '/integrations', icon: BookOpen,          label: 'Integrations' },
-  { to: '/settings',     icon: SlidersHorizontal, label: 'Settings' },
+  { to: '/categories',   icon: Tag,               label: 'Categories & Rules' },
+  { to: '/connections',  icon: Plug,              label: 'Connections' },
+  { to: '/preferences',  icon: SlidersHorizontal, label: 'Preferences' },
 ]
 
 function NavGroup({ label, items }: { label: string; items: typeof NAV_OVERVIEW }) {
@@ -76,8 +75,9 @@ export default function App() {
               <div className="nav-brand-word">Money Manager</div>
             </div>
             <NavGroup label="Overview" items={NAV_OVERVIEW} />
-            <NavGroup label="Manage" items={NAV_MANAGE} />
-            <NavGroup label="Settings" items={NAV_SETTINGS} />
+            <NavGroup label="Activity" items={NAV_ACTIVITY} />
+            <NavGroup label="Plan" items={NAV_PLAN} />
+            <NavGroup label="Setup" items={NAV_SETUP} />
 
             <div className="sidebar-user">
               <div className="sidebar-user-card">
@@ -94,16 +94,22 @@ export default function App() {
             <Routes>
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
               <Route path="/dashboard"       element={<Dashboard />} />
-              <Route path="/add-balance"     element={<AddBalance />} />
               <Route path="/transactions"    element={<Transactions />} />
-              <Route path="/predictions"     element={<Predictions />} />
-              <Route path="/goal-calculator" element={<GoalCalculator />} />
+              <Route path="/balances"        element={<Balances />} />
               <Route path="/import"          element={<Import />} />
-              <Route path="/manage-balances" element={<ManageBalances />} />
-              <Route path="/categories"      element={<Categories />} />
+              <Route path="/projections"     element={<Projections />} />
               <Route path="/accounts"        element={<Accounts />} />
-              <Route path="/settings"        element={<SettingsPage />} />
-              <Route path="/integrations"    element={<Integrations />} />
+              <Route path="/categories"      element={<Categories />} />
+              <Route path="/connections"     element={<Connections />} />
+              <Route path="/preferences"     element={<Preferences />} />
+
+              {/* Old routes, kept as redirects for stale bookmarks/tabs */}
+              <Route path="/add-balance"     element={<Navigate to="/balances" replace />} />
+              <Route path="/manage-balances" element={<Navigate to="/balances" replace />} />
+              <Route path="/predictions"     element={<Navigate to="/projections" replace />} />
+              <Route path="/goal-calculator" element={<Navigate to="/projections" replace />} />
+              <Route path="/integrations"    element={<Navigate to="/connections" replace />} />
+              <Route path="/settings"        element={<Navigate to="/preferences" replace />} />
             </Routes>
           </main>
           <ChatSidebar />

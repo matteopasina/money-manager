@@ -93,11 +93,6 @@ export default function GoalCalculator() {
 
   return (
     <div>
-      <div className="page-header">
-        <h1>Goal Calculator</h1>
-        <p>FIRE / investment target projections</p>
-      </div>
-
       <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr', gap: '1.5rem' }}>
         <div className="card" style={{ alignSelf: 'start' }}>
           <div className="section-title" style={{ marginBottom: '1rem' }}>Parameters</div>

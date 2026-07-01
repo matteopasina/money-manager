@@ -165,7 +165,7 @@ export default function Dashboard() {
           <h1>{greeting()}</h1>
           <p>{new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
         </div>
-        <button className="btn btn-primary" onClick={() => navigate('/add-balance')}>+ Add balance</button>
+        <button className="btn btn-primary" onClick={() => navigate('/balances')}>+ Add balance</button>
       </div>
 
       {/* Hero — net worth */}
