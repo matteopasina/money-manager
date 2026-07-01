@@ -108,6 +108,39 @@ export const api = {
       request<AccountReturnsResult>('/analytics/account-returns'),
   },
 
+  // BBVA live sync via Saltedge
+  bbva: {
+    createCustomer: () =>
+      request<{ customer_id: string; note?: string }>('/bbva/create-customer', { method: 'POST' }),
+    connect: (returnTo?: string) =>
+      request<{ connect_url: string }>(
+        `/bbva/connect${returnTo ? `?return_to=${encodeURIComponent(returnTo)}` : ''}`,
+        { method: 'POST' }
+      ),
+    linkStatus: () =>
+      request<{ status: string; connection_id?: string; accounts?: { id: string; name: string; currency: string }[] }>('/bbva/link-status'),
+    syncTransactions: (accountId: number, days = 90) =>
+      request<{ inserted: number; skipped: number }>(
+        `/bbva/sync/transactions?account_id=${accountId}&days=${days}`, { method: 'POST' }
+      ),
+    syncBalances: (accountId: number) =>
+      request<{ inserted: number; skipped: number }>(
+        `/bbva/sync/balances?account_id=${accountId}`, { method: 'POST' }
+      ),
+  },
+
+  // Binance live sync
+  binance: {
+    syncTransactions: (accountId: number) =>
+      request<{ inserted: number; skipped: number }>(
+        `/binance/sync/transactions?account_id=${accountId}`, { method: 'POST' }
+      ),
+    syncPortfolio: (accountId: number) =>
+      request<{ inserted: number; skipped: number }>(
+        `/binance/sync/portfolio?account_id=${accountId}`, { method: 'POST' }
+      ),
+  },
+
   // Interactive Brokers live sync
   ib: {
     syncTransactions: (accountId: number) =>
