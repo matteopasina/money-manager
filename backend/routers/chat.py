@@ -4,12 +4,18 @@ The client sends the full message history; the server runs the LiteLLM
 tool-calling loop and returns the assistant reply + updated history.
 """
 import json
+import re
+import sqlite3
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from datetime import datetime
 import database as db
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
+
+# app_settings holds credentials (encrypted, but off-limits regardless).
+_SQL_BLOCKED_TABLES = {"app_settings"}
+_SQL_MAX_ROWS = 200
 
 TOOLS = [
     {"type": "function", "function": {
@@ -51,6 +57,27 @@ TOOLS = [
         "parameters": {"type": "object", "properties": {
             "months": {"type": "integer", "description": "Months to look back (default 12)"}
         }, "required": []},
+    }},
+    {"type": "function", "function": {
+        "name": "get_schema",
+        "description": "Return the SQLite schema (CREATE TABLE statements) for every queryable table. "
+                       "Call this before run_sql to learn the exact table and column names.",
+        "parameters": {"type": "object", "properties": {}, "required": []},
+    }},
+    {"type": "function", "function": {
+        "name": "run_sql",
+        "description": (
+            "Run a read-only SQL query against the finance database for anything the other tools "
+            "don't cover. Rules: a single SELECT (or WITH…SELECT) statement only — no INSERT/UPDATE/"
+            "DELETE/PRAGMA/ATTACH. Key tables: transactions(date, description, amount, amount_base, "
+            "category, account_id), accounts(id, name, currency, account_type), balances(account_id, "
+            "date, amount_native, amount_base), categories(name, is_income, is_transfer), budgets, "
+            "fx_rates. Spending = amount < 0; amounts in base currency use COALESCE(amount_base, amount). "
+            "Call get_schema first if unsure about columns. Results are capped at 200 rows."
+        ),
+        "parameters": {"type": "object", "properties": {
+            "query": {"type": "string", "description": "A single read-only SELECT statement"}
+        }, "required": ["query"]},
     }},
 ]
 
@@ -174,6 +201,49 @@ def _tool_get_net_worth_trend(inputs: dict) -> str:
     return json.dumps({"trend": trend, "currency": base_currency})
 
 
+def _tool_get_schema(inputs: dict) -> str:
+    with db.get_connection() as conn:
+        rows = conn.execute(
+            "SELECT name, sql FROM sqlite_master WHERE type='table' "
+            "AND name NOT IN ('app_settings', 'sqlite_sequence') ORDER BY name"
+        ).fetchall()
+    return json.dumps({"tables": [{"name": r["name"], "sql": r["sql"]} for r in rows]})
+
+
+def _tool_run_sql(inputs: dict) -> str:
+    """Execute a read-only, single-statement SELECT. Guards: SELECT/WITH only,
+    secrets table blocked, read-only connection, results row-capped."""
+    query = (inputs.get("query") or "").strip().rstrip(";").strip()
+    if not query:
+        return json.dumps({"error": "Empty query"})
+    if ";" in query:
+        return json.dumps({"error": "Only a single statement is allowed"})
+    low = query.lower()
+    if not (low.startswith("select") or low.startswith("with")):
+        return json.dumps({"error": "Only SELECT queries are allowed (read-only)"})
+    for table in _SQL_BLOCKED_TABLES:
+        if re.search(rf"\b{re.escape(table)}\b", low):
+            return json.dumps({"error": f"The {table} table is not accessible"})
+
+    try:
+        conn = sqlite3.connect(f"file:{db.DB_PATH}?mode=ro", uri=True)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA query_only = ON")
+        try:
+            cur = conn.execute(query)
+            fetched = cur.fetchmany(_SQL_MAX_ROWS + 1)
+            columns = [d[0] for d in cur.description] if cur.description else []
+        finally:
+            conn.close()
+    except sqlite3.Error as e:
+        return json.dumps({"error": f"SQL error: {e}"})
+
+    truncated = len(fetched) > _SQL_MAX_ROWS
+    rows = [dict(r) for r in fetched[:_SQL_MAX_ROWS]]
+    return json.dumps({"columns": columns, "rows": rows, "row_count": len(rows),
+                       "truncated": truncated}, default=str)
+
+
 _TOOL_HANDLERS: dict = {
     "get_net_worth_summary":    _tool_get_net_worth_summary,
     "get_account_balances":     _tool_get_account_balances,
@@ -181,6 +251,8 @@ _TOOL_HANDLERS: dict = {
     "get_monthly_cash_flow":    _tool_get_monthly_cash_flow,
     "get_recent_transactions":  _tool_get_recent_transactions,
     "get_net_worth_trend":      _tool_get_net_worth_trend,
+    "get_schema":               _tool_get_schema,
+    "run_sql":                  _tool_run_sql,
 }
 
 
@@ -214,6 +286,9 @@ def chat(body: ChatRequest):
     system = (
         f"You are a personal finance assistant. Today is {datetime.today().strftime('%Y-%m-%d')}. "
         "You have tools to query the user's financial data. Always call a tool to fetch data before answering. "
+        "Prefer the specific tools (net worth, balances, spending, cash flow, transactions, trend) for common "
+        "questions. For anything they don't cover, use run_sql with a read-only SELECT — call get_schema first "
+        "if you're unsure of the exact table or column names. "
         "Be concise: 1-3 short paragraphs or a bullet list. Use the base currency symbol for amounts."
     )
     if body.page_context:
