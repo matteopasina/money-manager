@@ -9,7 +9,10 @@ function buildCashFlowTraces(rows: TransactionRow[], transferCats: Set<string>) 
   for (const r of rows) {
     const month = r.date.slice(0, 7)
     if (!byMonth[month]) byMonth[month] = { income: 0, spend: 0, invest: 0 }
-    if (transferCats.has(r.category ?? '')) {
+    if (r.category === 'Trade') {
+      // Brokerage trades are cash→asset conversions inside an account: the money
+      // was already counted as invested when it was transferred in. Skip entirely.
+    } else if (transferCats.has(r.category ?? '')) {
       // A transfer between own accounts produces two rows (outgoing + incoming).
       // Only count the outgoing leg — the incoming leg is the same money, not new activity.
       if (r.amount < 0) byMonth[month].invest += Math.abs(r.amount)
@@ -105,7 +108,7 @@ export default function Transactions() {
   const transferCats   = useMemo(() => new Set(categories.filter(c => c.is_transfer).map(c => c.name)), [categories])
   const totalIncome    = visible.filter(r => r.amount > 0 && !transferCats.has(r.category ?? '')).reduce((s, r) => s + r.amount, 0)
   const totalSpend     = visible.filter(r => r.amount < 0 && !transferCats.has(r.category ?? '')).reduce((s, r) => s + r.amount, 0)
-  const totalInvest    = visible.filter(r => transferCats.has(r.category ?? '') && r.amount < 0).reduce((s, r) => s + Math.abs(r.amount), 0)
+  const totalInvest    = visible.filter(r => r.category !== 'Trade' && transferCats.has(r.category ?? '') && r.amount < 0).reduce((s, r) => s + Math.abs(r.amount), 0)
   const cashFlowTraces = useMemo(() => buildCashFlowTraces(visible, transferCats), [visible, transferCats])
   const categoryTraces = useMemo(() => buildCategoryTrace(visible, categories), [visible, categories])
 

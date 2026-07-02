@@ -593,6 +593,11 @@ _DEFAULT_RULES: list[tuple[str, str, str, int]] = [
     ("zara",        "Shopping", "description", 0),
     # Transfers between own accounts (not real income/spend)
     ("deposits/withdrawals", "Transfer", "reference", 0),
+    # BBVA via Enable Banking uses Spanish descriptions (Excel exports were Italian)
+    ("abono de nomina", "Income", "description", 0),
+    ("ordenes pago emitidas", "Investment", "description", 0),
+    # IB dividend credits and their withholding-tax rows (negative) net together
+    ("cash dividend", "Dividends", "description", 0),
 ]
 
 

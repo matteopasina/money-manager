@@ -64,7 +64,12 @@ class IBTransactionsAdapter(BaseAdapter):
                 action = tr.get("buySell", "")
                 desc   = f"{action} {qty} {symbol} @ {price}"
                 date   = _parse_ib_date(tr.get("tradeDate", ""))
+                # Trades are internal cash→asset conversions, not spending: the
+                # cash was already counted as invested when it entered IB. They
+                # default to the excluded 'Trade' category unless a rule matches.
                 cat    = categorise(desc, symbol) if categorise else None
+                if cat in (None, "Other"):
+                    cat = "Trade"
                 txns.append(Transaction(
                     account_id=account_id, date=date, description=desc,
                     amount=net, amount_base=net * rate,
