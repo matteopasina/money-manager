@@ -5,7 +5,7 @@ from typing import Optional
 
 from cryptography.fernet import Fernet, InvalidToken
 
-from domain import Account, Balance, Transaction, Category, KeywordRule
+from domain import Account, Balance, Budget, Transaction, Category, KeywordRule
 
 DB_PATH = os.environ.get("DB_PATH", "finances.db")
 
@@ -161,6 +161,15 @@ def init_db() -> None:
                 status      TEXT NOT NULL,   -- 'success' | 'error'
                 message     TEXT,
                 ran_at      TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS budgets (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                category_name  TEXT    NOT NULL UNIQUE,
+                monthly_amount REAL    NOT NULL,
+                rollover       INTEGER NOT NULL DEFAULT 0,
+                start_month    TEXT    NOT NULL,
+                active         INTEGER NOT NULL DEFAULT 1
             );
         """)
         _migrate(conn)
@@ -616,6 +625,112 @@ def seed_keyword_rules_defaults() -> tuple[int, int]:
                 )
                 inserted += 1
     return inserted, skipped
+
+
+# ── Budgets ────────────────────────────────────────────────────────────────────
+
+def get_budgets() -> list[Budget]:
+    with get_connection() as conn:
+        rows = conn.execute("SELECT * FROM budgets ORDER BY category_name").fetchall()
+    return [Budget(id=r["id"], category_name=r["category_name"],
+                   monthly_amount=r["monthly_amount"], rollover=bool(r["rollover"]),
+                   start_month=r["start_month"], active=bool(r["active"])) for r in rows]
+
+
+def upsert_budget(b: Budget) -> Budget:
+    """start_month is intentionally not updatable — it anchors rollover accrual.
+    UNIQUE(category_name) violations propagate; the router maps them to 409."""
+    with get_connection() as conn:
+        if b.id:
+            conn.execute(
+                "UPDATE budgets SET category_name=?, monthly_amount=?, rollover=?, active=? WHERE id=?",
+                (b.category_name, b.monthly_amount, int(b.rollover), int(b.active), b.id),
+            )
+            return b
+        cur = conn.execute(
+            "INSERT INTO budgets (category_name, monthly_amount, rollover, start_month, active) VALUES (?, ?, ?, ?, ?)",
+            (b.category_name, b.monthly_amount, int(b.rollover), b.start_month, int(b.active)),
+        )
+        return Budget(id=cur.lastrowid, category_name=b.category_name,
+                      monthly_amount=b.monthly_amount, rollover=b.rollover,
+                      start_month=b.start_month, active=b.active)
+
+
+def delete_budget(budget_id: int) -> None:
+    with get_connection() as conn:
+        conn.execute("DELETE FROM budgets WHERE id = ?", (budget_id,))
+
+
+def get_monthly_spend_by_category(
+    start_month: Optional[str] = None,
+    end_month: Optional[str] = None,
+    categories: Optional[list[str]] = None,
+) -> dict[str, dict[str, float]]:
+    """{category: {'YYYY-MM': spent}} — spending only (amount < 0, non-transfer,
+    non-income categories), as positive base-currency floats. Months without
+    spending are simply absent; callers read them as 0 via .get()."""
+    excluded = get_transfer_category_names()
+    conditions = ["amount < 0", "category IS NOT NULL"]
+    params: list = []
+    if excluded:
+        conditions.append(f"category NOT IN ({','.join('?' * len(excluded))})")
+        params += list(excluded)
+    if categories is not None:
+        if not categories:
+            return {}
+        conditions.append(f"category IN ({','.join('?' * len(categories))})")
+        params += categories
+    if start_month:
+        conditions.append("substr(date, 1, 7) >= ?"); params.append(start_month)
+    if end_month:
+        conditions.append("substr(date, 1, 7) <= ?"); params.append(end_month)
+
+    with get_connection() as conn:
+        rows = conn.execute(
+            f"""SELECT category, substr(date, 1, 7) AS month,
+                       -SUM(COALESCE(amount_base, amount)) AS spent
+                FROM transactions
+                WHERE {' AND '.join(conditions)}
+                GROUP BY category, month""",
+            params,
+        ).fetchall()
+
+    out: dict[str, dict[str, float]] = {}
+    for r in rows:
+        out.setdefault(r["category"], {})[r["month"]] = r["spent"]
+    return out
+
+
+def get_monthly_total_spend(
+    start_month: Optional[str] = None,
+    end_month: Optional[str] = None,
+) -> dict[str, float]:
+    """{'YYYY-MM': spent} across ALL spending — unlike the per-category helper,
+    uncategorized (NULL-category) rows count too, since a total cap must catch
+    everything that isn't a transfer or income."""
+    excluded = get_transfer_category_names()
+    conditions = ["amount < 0"]
+    params: list = []
+    if excluded:
+        conditions.append(
+            f"(category IS NULL OR category NOT IN ({','.join('?' * len(excluded))}))"
+        )
+        params += list(excluded)
+    if start_month:
+        conditions.append("substr(date, 1, 7) >= ?"); params.append(start_month)
+    if end_month:
+        conditions.append("substr(date, 1, 7) <= ?"); params.append(end_month)
+
+    with get_connection() as conn:
+        rows = conn.execute(
+            f"""SELECT substr(date, 1, 7) AS month,
+                       -SUM(COALESCE(amount_base, amount)) AS spent
+                FROM transactions
+                WHERE {' AND '.join(conditions)}
+                GROUP BY month""",
+            params,
+        ).fetchall()
+    return {r["month"]: r["spent"] for r in rows}
 
 
 # ── Analytics helpers (used by Predictions / Goal Calculator) ──────────────────

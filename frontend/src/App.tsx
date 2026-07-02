@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { BrowserRouter, NavLink, Routes, Route, Navigate } from 'react-router-dom'
 import {
   LayoutDashboard, Receipt, Wallet, UploadCloud,
-  TrendingUp, Tag, Settings, Plug, SlidersHorizontal,
+  TrendingUp, Tag, Settings, Plug, SlidersHorizontal, PiggyBank,
 } from 'lucide-react'
 import { ThemeProvider } from './ThemeContext'
 import { api } from './api/client'
@@ -13,6 +13,7 @@ import Transactions from './pages/Transactions'
 import Balances from './pages/Balances'
 import Import from './pages/Import'
 import Projections from './pages/Projections'
+import Budgets from './pages/Budgets'
 import Accounts from './pages/Accounts'
 import Categories from './pages/Categories'
 import Connections from './pages/Connections'
@@ -29,6 +30,7 @@ const NAV_ACTIVITY = [
 ]
 
 const NAV_PLAN = [
+  { to: '/budgets',      icon: PiggyBank,  label: 'Budgets' },
   { to: '/projections',  icon: TrendingUp, label: 'Projections' },
 ]
 
@@ -98,6 +100,7 @@ export default function App() {
               <Route path="/balances"        element={<Balances />} />
               <Route path="/import"          element={<Import />} />
               <Route path="/projections"     element={<Projections />} />
+              <Route path="/budgets"         element={<Budgets />} />
               <Route path="/accounts"        element={<Accounts />} />
               <Route path="/categories"      element={<Categories />} />
               <Route path="/connections"     element={<Connections />} />

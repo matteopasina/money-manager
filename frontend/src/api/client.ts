@@ -86,6 +86,20 @@ export const api = {
     },
   },
 
+  // Budgets
+  budgets: {
+    list: () => request<BudgetsStatus>('/budgets'),
+    create: (body: BudgetIn) =>
+      request<BudgetRow>('/budgets', { method: 'POST', body: JSON.stringify(body) }),
+    update: (id: number, body: BudgetIn) =>
+      request<{ ok: boolean }>(`/budgets/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+    delete: (id: number) =>
+      request<{ ok: boolean }>(`/budgets/${id}`, { method: 'DELETE' }),
+    history: (months = 6) =>
+      request<BudgetHistory>(`/budgets/history?months=${months}`),
+    suggest: () => request<BudgetSuggestions>('/budgets/suggest'),
+  },
+
   // Settings
   settings: {
     all: () => request<Record<string, string>>('/settings'),
@@ -335,6 +349,59 @@ export interface AccountReturnsResult {
   }[]
   weighted_annual_return_pct: number
   currency: string
+}
+
+export interface BudgetIn {
+  category_name: string
+  monthly_amount: number
+  rollover: boolean
+  active: boolean
+}
+
+export interface BudgetRow {
+  id: number
+  category_name: string
+  monthly_amount: number
+  rollover: boolean
+  start_month: string
+  active: boolean
+  category_color: string | null
+  orphaned: boolean
+  spent: number
+  carry: number
+  effective: number
+  remaining: number
+  pct: number | null
+}
+
+export interface BudgetsStatus {
+  month: string
+  currency: string
+  budgets: BudgetRow[]
+  totals: { budgeted: number; effective: number; spent: number; remaining: number }
+  total_budget: BudgetRow | null   // the "All spending" cap, if one exists
+}
+
+// Reserved pseudo-category name for the "All spending" budget.
+export const TOTAL_BUDGET = '__total__'
+
+export interface BudgetHistory {
+  months: string[]
+  currency: string
+  series: {
+    id: number
+    category_name: string
+    active: boolean
+    rollover: boolean
+    budget: (number | null)[]
+    effective: (number | null)[]
+    spent: (number | null)[]
+  }[]
+}
+
+export interface BudgetSuggestions {
+  window_months: number
+  suggestions: { category_name: string; avg_monthly_spend: number; months_with_data: number }[]
 }
 
 export interface SyncIntegrationStatus {

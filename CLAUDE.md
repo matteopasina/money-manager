@@ -62,6 +62,7 @@ cd frontend && npm test
 - `fx_rates` — currency → rate_to_base (how many base-currency units per 1 foreign unit)
 - `app_settings` — key/value store (base_currency defaults to EUR, llm_model, llm_api_key)
 - `sync_log` — auto-sync history + cache; the scheduler (`backend/scheduler.py`) syncs each configured integration on startup and every `auto_sync_interval_hours`, skipping any with a success newer than the interval
+- `budgets` — per-category monthly spending caps (expense categories only, linked by name); optional rollover carry is derived on read from `start_month`, never stored
 
 ## Adapters
 

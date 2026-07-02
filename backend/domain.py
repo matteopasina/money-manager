@@ -51,3 +51,13 @@ class KeywordRule:
     match_field: str = "any" # "description", "reference", or "any"
     priority: int = 0        # higher = evaluated first
     id: int | None = None
+
+
+@dataclass
+class Budget:
+    category_name: str       # links by name, like keyword_rules (no FK cascade)
+    monthly_amount: float    # base currency
+    rollover: bool = False   # unused budget carries into later months
+    start_month: str = ""    # 'YYYY-MM', set server-side at creation; anchors rollover accrual
+    active: bool = True
+    id: int | None = None
