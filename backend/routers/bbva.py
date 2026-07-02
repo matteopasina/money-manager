@@ -119,6 +119,13 @@ def sync_transactions(account_id: int = Query(...), days: int = Query(default=90
         raise HTTPException(400, "BBVA not linked — connect first in Connections")
 
     date_from = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d")
+    # Floor: Enable Banking sends Spanish descriptions while the historical
+    # Excel imports were Italian, so the same transaction dodges the
+    # (date, description, amount) dedup key. Never re-fetch the Excel-covered
+    # period or every overlapping transaction would come back duplicated.
+    floor = db.get_setting("bbva_eb_tx_date_from", "").strip()
+    if floor and floor > date_from:
+        date_from = floor
     data = _eb_get(f"/accounts/{uid}/transactions", {"date_from": date_from})
     txns_data = data.get("transactions", [])
 
