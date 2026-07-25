@@ -1,12 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { api, type Account } from '../api/client'
 import LoadingSpinner from '../components/LoadingSpinner'
 import Alert from '../components/Alert'
 import { CURRENCIES, ACCOUNT_TYPES } from '../constants'
+import { useApi } from '../hooks/useApi'
 
 export default function Accounts() {
-  const [accounts, setAccounts]   = useState<Account[]>([])
-  const [loading, setLoading]     = useState(true)
   const [showForm, setShowForm]   = useState(false)
   const [editFx, setEditFx]       = useState<Record<string, string>>({})
   const [saving, setSaving]       = useState(false)
@@ -14,26 +13,35 @@ export default function Accounts() {
 
   const [form, setForm] = useState({ name: '', currency: 'EUR', account_type: 'liquid' })
 
-  async function load() {
-    const [a, fx] = await Promise.all([api.accounts.list(), api.accounts.fxRates()])
-    setAccounts(a)
-    const fxMap: Record<string, string> = {}
-    fx.forEach(r => { fxMap[r.currency] = String(r.rate_to_base) })
-    setEditFx(fxMap)
-    setLoading(false)
-  }
+  const { data: loaded, loading, error, reload } = useApi(
+    () => Promise.all([api.accounts.list(), api.accounts.fxRates(), api.settings.all()]),
+    [],
+  )
+  const accounts = useMemo(() => loaded?.[0] ?? [], [loaded])
+  const fxRates = useMemo(() => loaded?.[1] ?? [], [loaded])
+  const baseCurrency = loaded ? (loaded[2].base_currency ?? 'EUR') : 'EUR'
 
-  useEffect(() => { load() }, [])
+  // Default the new-account form to the base currency once it's known.
+  useEffect(() => {
+    setForm(f => ({ ...f, currency: baseCurrency }))
+  }, [baseCurrency])
+
+  // Reset the editable FX map from the server whenever a (re)fetch resolves.
+  useEffect(() => {
+    const fxMap: Record<string, string> = {}
+    fxRates.forEach(r => { fxMap[r.currency] = String(r.rate_to_base) })
+    setEditFx(fxMap)
+  }, [fxRates])
 
   async function createAccount() {
     if (!form.name.trim()) return
     setSaving(true)
     try {
       await api.accounts.create(form)
-      setForm({ name: '', currency: 'EUR', account_type: 'liquid' })
+      setForm({ name: '', currency: baseCurrency, account_type: 'liquid' })
       setShowForm(false)
       setMsg({ type: 'success', text: 'Account created.' })
-      await load()
+      reload()
     } catch (e: unknown) {
       setMsg({ type: 'error', text: e instanceof Error ? e.message : String(e) })
     } finally {
@@ -43,7 +51,7 @@ export default function Accounts() {
 
   async function toggleActive(a: Account) {
     await api.accounts.update(a.id, { active: !a.active })
-    await load()
+    reload()
   }
 
   async function saveFxRate(currency: string) {
@@ -53,7 +61,7 @@ export default function Accounts() {
     try {
       await api.accounts.upsertFxRate(currency, rate)
       setMsg({ type: 'success', text: `FX rate for ${currency} saved.` })
-      await load()
+      reload()
     } catch (e: unknown) {
       setMsg({ type: 'error', text: e instanceof Error ? e.message : String(e) })
     } finally {
@@ -63,7 +71,14 @@ export default function Accounts() {
 
   if (loading) return <LoadingSpinner />
 
-  const nonBaseCurrencies = [...new Set(accounts.map(a => a.currency))].filter(c => c !== 'EUR')
+  if (error) return (
+    <div>
+      <div className="page-header"><h1>Accounts & FX</h1></div>
+      <Alert type="error">Couldn't load accounts: {error}</Alert>
+    </div>
+  )
+
+  const nonBaseCurrencies = [...new Set(accounts.map(a => a.currency))].filter(c => c !== baseCurrency)
 
   return (
     <div>
@@ -148,10 +163,10 @@ export default function Accounts() {
 
       {nonBaseCurrencies.length > 0 && (
         <>
-          <div className="section-title">FX Rates to Base Currency (EUR)</div>
+          <div className="section-title">FX Rates to Base Currency ({baseCurrency})</div>
           <div className="card">
             <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
-              Set how many EUR each unit of foreign currency is worth (e.g. USD 0.92 means 1 USD = 0.92 EUR).
+              Set how many {baseCurrency} each unit of foreign currency is worth (e.g. USD 0.92 means 1 USD = 0.92 {baseCurrency}).
             </p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
               {nonBaseCurrencies.map(curr => (

@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 import database as db
 import scheduler
-from routers import accounts, balances, budgets, transactions, categories, import_, settings, analytics, chat, ib, binance, bbva, revolut, sync
+from routers import accounts, balances, budgets, transactions, categories, import_, settings, analytics, chat, assistant, ib, binance, bbva, revolut, sync
 
 app = FastAPI(title="Money Manager API")
 
@@ -33,6 +33,7 @@ app.include_router(import_.router)
 app.include_router(settings.router)
 app.include_router(analytics.router)
 app.include_router(chat.router)
+app.include_router(assistant.router)
 app.include_router(ib.router)
 app.include_router(binance.router)
 app.include_router(bbva.router)

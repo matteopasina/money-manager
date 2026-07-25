@@ -1,8 +1,12 @@
-import { useState, useCallback, useEffect } from 'react'
-import { api, type FireResult } from '../api/client'
-import MoneyChart, { fmt } from '../components/MoneyChart'
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { ArrowRight, Sparkles } from 'lucide-react'
+import { api } from '../api/client'
+import MoneyChart from '../components/MoneyChart'
+import { fmt } from '../utils/money'
 import LoadingSpinner from '../components/LoadingSpinner'
 import Alert from '../components/Alert'
+import { useApi } from '../hooks/useApi'
 
 const DEFAULT_PARAMS = {
   target_amount: 1000000,
@@ -12,11 +16,15 @@ const DEFAULT_PARAMS = {
   monthly_expenses: 0,
 }
 
+// Fields the backend can auto-detect from transaction history when omitted.
+// Untouched, they track the backend's resolved value; the first slider/input
+// interaction "touches" the field and its literal value (including 0) is sent.
+type AutoKey = 'monthly_contribution' | 'monthly_expenses'
+
 export default function GoalCalculator() {
+  const navigate = useNavigate()
   const [params, setParams] = useState(DEFAULT_PARAMS)
-  const [data, setData]     = useState<FireResult | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError]   = useState<string | null>(null)
+  const [touched, setTouched] = useState<Record<AutoKey, boolean>>({ monthly_contribution: false, monthly_expenses: false })
   const [detectedReturn, setDetectedReturn] = useState<number | null>(null)
 
   useEffect(() => {
@@ -29,42 +37,73 @@ export default function GoalCalculator() {
     }).catch(() => { /* non-fatal */ })
   }, [])
 
-  const run = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const res = await api.analytics.fire({
-        target_amount: params.target_amount,
-        annual_return_pct: params.annual_return_pct,
-        monthly_contribution: params.monthly_contribution || undefined,
-        withdrawal_rate_pct: params.withdrawal_rate_pct,
-        monthly_expenses: params.monthly_expenses || undefined,
-      })
-      setData(res)
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e))
-    } finally {
-      setLoading(false)
+  // Debounced + race-safe: dragging a slider fires this on every tick, but
+  // only the latest response after a ~300ms pause is ever applied.
+  const { data, loading, error } = useApi(
+    () => api.analytics.fire({
+      target_amount: params.target_amount,
+      annual_return_pct: params.annual_return_pct,
+      monthly_contribution: touched.monthly_contribution ? params.monthly_contribution : undefined,
+      withdrawal_rate_pct: params.withdrawal_rate_pct,
+      monthly_expenses: touched.monthly_expenses ? params.monthly_expenses : undefined,
+    }),
+    [
+      params.target_amount, params.annual_return_pct, params.withdrawal_rate_pct,
+      touched.monthly_contribution, touched.monthly_expenses,
+      touched.monthly_contribution ? params.monthly_contribution : null,
+      touched.monthly_expenses ? params.monthly_expenses : null,
+    ],
+    300,
+  )
+
+  // Keep untouched sliders tracking the backend's resolved (auto-detected)
+  // value, so the first drag starts from a realistic number instead of 0.
+  useEffect(() => {
+    if (!data) return
+    setParams(p => {
+      const contribution = touched.monthly_contribution ? p.monthly_contribution : data.monthly_contribution
+      const expenses = touched.monthly_expenses ? p.monthly_expenses : data.monthly_expenses
+      if (contribution === p.monthly_contribution && expenses === p.monthly_expenses) return p
+      return { ...p, monthly_contribution: contribution, monthly_expenses: expenses }
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data])
+
+  function field(label: string, key: keyof typeof params, min: number, max: number, step: number, suffix = '', autoKey?: AutoKey) {
+    const isAuto = autoKey != null && !touched[autoKey]
+    function onChange(value: string) {
+      // An emptied number input must not silently become 0 — clamp to the
+      // field's own minimum instead (e.g. withdrawal rate can't go below 1%).
+      const num = value === '' ? min : Number(value)
+      setParams(p => ({ ...p, [key]: isNaN(num) ? min : num }))
+      if (autoKey) setTouched(t => ({ ...t, [autoKey]: true }))
     }
-  }, [params])
-
-  useEffect(() => { run() }, [run])
-
-  function field(label: string, key: keyof typeof params, min: number, max: number, step: number, suffix = '') {
     return (
       <div className="form-group">
-        <label>{label}</label>
+        <label>
+          {label}
+          {isAuto && <span style={{ color: 'var(--ink-faint)', fontWeight: 400 }}> · auto-detected</span>}
+          {autoKey && touched[autoKey] && (
+            <button
+              type="button" className="btn-link"
+              style={{ fontSize: '0.75rem', marginLeft: 8 }}
+              onClick={() => setTouched(t => ({ ...t, [autoKey]: false }))}
+            >
+              Reset to auto-detect
+            </button>
+          )}
+        </label>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <input
             type="range" min={min} max={max} step={step}
             value={params[key]}
-            onChange={e => setParams(p => ({ ...p, [key]: Number(e.target.value) }))}
+            onChange={e => onChange(e.target.value)}
             style={{ flex: 1 }}
           />
           <input
             type="number" min={min} max={max} step={step}
             value={params[key]}
-            onChange={e => setParams(p => ({ ...p, [key]: Number(e.target.value) }))}
+            onChange={e => onChange(e.target.value)}
             style={{ width: 100, textAlign: 'right' }}
           />
           {suffix && <span style={{ color: 'var(--text-muted)', minWidth: 20 }}>{suffix}</span>}
@@ -91,115 +130,163 @@ export default function GoalCalculator() {
     line: { color: '#10d98e', width: 1.5, dash: 'dash' as const },
   }] : []
 
+  const hasDetected = Boolean(data && (
+    data.detected_income != null ||
+    data.detected_expenses != null ||
+    data.detected_return_pct != null
+  ))
+  const targetProgress = data && data.target_amount > 0
+    ? Math.max(0, Math.min(100, (data.current_nw / data.target_amount) * 100))
+    : 0
+  const targetGap = data ? Math.max(0, data.target_amount - data.current_nw) : 0
+
+  function askHelper(focus: string) {
+    if (!data) return
+    const targetTiming = data.years_to_target === null
+      ? 'not reached in the projection window'
+      : `${data.years_to_target.toFixed(1)} years`
+    const prompt = [
+      `Review my goal planner scenario and focus on: ${focus}.`,
+      `Current net worth: ${fmt(data.current_nw, data.currency)}.`,
+      `Target amount: ${fmt(data.target_amount, data.currency)}.`,
+      `FIRE number: ${fmt(data.fire_number, data.currency)}.`,
+      `Monthly contribution: ${fmt(data.monthly_contribution, data.currency)}.`,
+      `Annual return assumption: ${params.annual_return_pct}%.`,
+      `Safe withdrawal rate: ${params.withdrawal_rate_pct}%.`,
+      `Monthly expenses: ${fmt(params.monthly_expenses, data.currency)}.`,
+      `Time to target: ${targetTiming}.`,
+      'Explain the tradeoffs, the weakest assumption, and one realistic adjustment to try next.',
+    ].join('\n')
+    navigate('/financial-helper', { state: { prompt, sourcePath: '/projections' } })
+  }
+
   return (
-    <div>
-      <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr', gap: '1.5rem' }}>
-        <div className="card" style={{ alignSelf: 'start' }}>
-          <div className="section-title" style={{ marginBottom: '1rem' }}>Parameters</div>
-          {field('Target Amount', 'target_amount', 0, 5000000, 10000, data?.currency ?? 'EUR')}
-          {field('Annual Return', 'annual_return_pct', 0, 20, 0.5, '%')}
-          {field('Monthly Contribution', 'monthly_contribution', 0, 10000, 100, data?.currency ?? 'EUR')}
-          {field('Safe Withdrawal Rate', 'withdrawal_rate_pct', 1, 10, 0.1, '%')}
-          {field('Monthly Expenses', 'monthly_expenses', 0, 10000, 100, data?.currency ?? 'EUR')}
-        </div>
+    <div className="goal-planner-page">
+      {error && <Alert type={error.startsWith('422') ? 'info' : 'error'}>{error}</Alert>}
 
-        <div>
-          {error && <Alert type={error.startsWith('422') ? 'info' : 'error'}>{error}</Alert>}
+      {loading && !data && <LoadingSpinner />}
 
-          {loading ? (
-            <LoadingSpinner />
-          ) : data ? (
-            <>
-              <div className="metrics-grid" style={{ marginBottom: '1.5rem' }}>
-                <div className="card">
-                  <div className="metric-label">Current Net Worth</div>
-                  <div className="metric-value" style={{ fontSize: '1.3rem' }}>{fmt(data.current_nw, data.currency)}</div>
-                </div>
-                <div className="card">
-                  <div className="metric-label">FIRE Number</div>
-                  <div className="metric-value" style={{ fontSize: '1.3rem' }}>{fmt(data.fire_number, data.currency)}</div>
-                </div>
-                <div className="card">
-                  <div className="metric-label">Target Amount</div>
-                  <div className="metric-value" style={{ fontSize: '1.3rem' }}>{fmt(data.target_amount, data.currency)}</div>
-                </div>
-                <div className="card">
-                  <div className="metric-label">Monthly Contribution</div>
-                  <div className="metric-value" style={{ fontSize: '1.3rem' }}>{fmt(data.monthly_contribution, data.currency)}</div>
-                </div>
-                {data.years_to_target !== null && (
-                  <div className="card">
-                    <div className="metric-label">Years to Target</div>
-                    <div className="metric-value" style={{ fontSize: '1.3rem', color: 'var(--accent-green)' }}>
-                      {data.years_to_target.toFixed(1)}y
-                    </div>
+      {data && (
+        <>
+          <section className="goal-planner-hero">
+            <div className="goal-planner-hero-copy">
+              <div className="goal-planner-kicker">Goal planner</div>
+              <h2>
+                {data.years_to_target === null
+                  ? 'Target is outside the current projection window'
+                  : `${data.years_to_target.toFixed(1)} years to target`}
+              </h2>
+              <p>
+                {fmt(targetGap, data.currency)} left to reach {fmt(data.target_amount, data.currency)} with {params.annual_return_pct}% annual return assumed.
+              </p>
+              <div className="goal-progress-track">
+                <div className="goal-progress-fill" style={{ width: `${targetProgress}%` }} />
+              </div>
+            </div>
+            <div className="goal-planner-hero-stats">
+              <div>
+                <span>Current</span>
+                <strong>{fmt(data.current_nw, data.currency)}</strong>
+              </div>
+              <div>
+                <span>Target</span>
+                <strong>{fmt(data.target_amount, data.currency)}</strong>
+              </div>
+              <div>
+                <span>FIRE number</span>
+                <strong>{fmt(data.fire_number, data.currency)}</strong>
+              </div>
+              <div>
+                <span>Monthly</span>
+                <strong>{fmt(data.monthly_contribution, data.currency)}</strong>
+              </div>
+            </div>
+          </section>
+
+          <div className="goal-planner-workspace">
+            <section className="card goal-planner-controls">
+              <div className="section-title" style={{ marginBottom: '1rem' }}>Parameters</div>
+              {field('Target Amount', 'target_amount', 0, 5000000, 10000, data.currency)}
+              {field('Annual Return', 'annual_return_pct', 0, 20, 0.5, '%')}
+              {field('Monthly Contribution', 'monthly_contribution', 0, 10000, 100, data.currency, 'monthly_contribution')}
+              {field('Safe Withdrawal Rate', 'withdrawal_rate_pct', 1, 10, 0.1, '%')}
+              {field('Monthly Expenses', 'monthly_expenses', 0, 10000, 100, data.currency, 'monthly_expenses')}
+            </section>
+
+            <section className="goal-planner-side-stack">
+              <div className="card goal-detected-card">
+                <div className="goal-planner-kicker">Detected from your data</div>
+                {hasDetected ? (
+                  <div className="goal-detected-list">
+                    {data.detected_income != null && (
+                      <div className="goal-detected-row">
+                        <span>Monthly income</span>
+                        <strong>{fmt(data.detected_income, data.currency)}</strong>
+                      </div>
+                    )}
+                    {data.detected_expenses != null && (
+                      <div className="goal-detected-row">
+                        <span>Monthly expenses</span>
+                        <strong>{fmt(data.detected_expenses, data.currency)}</strong>
+                      </div>
+                    )}
+                    {data.detected_return_pct != null && (
+                      <div className="goal-detected-row">
+                        <span>Portfolio return</span>
+                        <strong className={data.detected_return_pct >= 5 ? 'positive' : data.detected_return_pct >= 1 ? 'watch' : ''}>
+                          {data.detected_return_pct >= 0 ? '+' : ''}{data.detected_return_pct.toFixed(1)}%/yr
+                        </strong>
+                      </div>
+                    )}
+                    {data.detected_income != null && data.detected_expenses != null && (
+                      <div className="goal-detected-row emphasized">
+                        <span>Detected contribution</span>
+                        <strong>{fmt(Math.max(0, data.detected_income - data.detected_expenses), data.currency)}/mo</strong>
+                      </div>
+                    )}
                   </div>
+                ) : (
+                  <p className="goal-muted-copy">Add more categorized transactions and balance history to unlock automatic planning assumptions.</p>
                 )}
-                {data.years_to_target === null && (
-                  <div className="card">
-                    <div className="metric-label">Status</div>
-                    <div className="metric-value" style={{ fontSize: '1rem', color: 'var(--accent-amber)' }}>
-                      Target not reached in projection window
-                    </div>
-                  </div>
+                {detectedReturn != null && (
+                  <p className="goal-muted-copy">
+                    Annual return pre-filled from your portfolio CAGR ({detectedReturn.toFixed(1)}%/yr).
+                  </p>
                 )}
               </div>
 
-              {(data.detected_income != null || data.detected_expenses != null || data.detected_return_pct != null) && (
-                <div className="card" style={{ marginBottom: '1.5rem', background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
-                  <div className="section-title" style={{ marginBottom: '0.75rem', fontSize: '0.82rem' }}>Detected from your data</div>
-                  <table style={{ fontSize: '0.84rem' }}>
-                    <tbody>
-                      {data.detected_income != null && (
-                        <tr>
-                          <td style={{ color: 'var(--text-muted)', paddingRight: '1.5rem', paddingBottom: '0.25rem' }}>Monthly income</td>
-                          <td style={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{fmt(data.detected_income, data.currency)}</td>
-                        </tr>
-                      )}
-                      {data.detected_expenses != null && (
-                        <tr>
-                          <td style={{ color: 'var(--text-muted)', paddingRight: '1.5rem', paddingBottom: '0.25rem' }}>Monthly expenses</td>
-                          <td style={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{fmt(data.detected_expenses, data.currency)}</td>
-                        </tr>
-                      )}
-                      {data.detected_return_pct != null && (
-                        <tr>
-                          <td style={{ color: 'var(--text-muted)', paddingRight: '1.5rem', paddingBottom: '0.25rem' }}>Portfolio return</td>
-                          <td style={{ fontWeight: 600, color: data.detected_return_pct >= 5 ? 'var(--accent-green)' : data.detected_return_pct >= 1 ? 'var(--accent-amber)' : 'var(--text-muted)' }}>
-                            {data.detected_return_pct >= 0 ? '+' : ''}{data.detected_return_pct.toFixed(1)}%/yr
-                          </td>
-                        </tr>
-                      )}
-                      {data.detected_income != null && data.detected_expenses != null && (
-                        <tr>
-                          <td style={{ color: 'var(--text-muted)', paddingRight: '1.5rem', borderTop: '1px solid var(--border)', paddingTop: '0.25rem' }}>→ Contribution</td>
-                          <td style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', borderTop: '1px solid var(--border)', paddingTop: '0.25rem' }}>
-                            {fmt(Math.max(0, data.detected_income - data.detected_expenses), data.currency)}/mo
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                  {detectedReturn != null && (
-                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0.5rem 0 0' }}>
-                      Annual return pre-filled from your actual portfolio CAGR ({detectedReturn.toFixed(1)}%/yr)
-                    </p>
-                  )}
+              <div className="projection-ai-card goal-ai-card">
+                <div>
+                  <div className="projection-ai-title"><Sparkles size={16} /> Ask about this plan</div>
+                  <p>Send these assumptions and the projected time to target to the Financial Helper.</p>
                 </div>
-              )}
-
-              <div className="section-title">Projection</div>
-              <div className="card">
-                <MoneyChart
-                  data={projectionTrace}
-                  layout={{ yaxis: { tickformat: ',.0f' } }}
-                  style={{ height: 360 }}
-                />
+                <div className="projection-ai-actions">
+                  <button className="btn btn-secondary btn-sm" onClick={() => askHelper('whether this target plan is realistic')}>
+                    Reality check <ArrowRight size={13} />
+                  </button>
+                  <button className="btn btn-secondary btn-sm" onClick={() => askHelper('how to reach the target sooner')}>
+                    Reach sooner <ArrowRight size={13} />
+                  </button>
+                  <button className="btn btn-secondary btn-sm" onClick={() => askHelper('how sensitive this plan is to returns and contributions')}>
+                    Stress test <ArrowRight size={13} />
+                  </button>
+                </div>
               </div>
-            </>
-          ) : null}
-        </div>
-      </div>
+            </section>
+          </div>
+
+          <section>
+            <div className="section-title">Projection</div>
+            <div className="card projection-chart-card">
+              <MoneyChart
+                data={projectionTrace}
+                layout={{ yaxis: { tickformat: ',.0f' } }}
+                style={{ height: 390 }}
+              />
+            </div>
+          </section>
+        </>
+      )}
     </div>
   )
 }

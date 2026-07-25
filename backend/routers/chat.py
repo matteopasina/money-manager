@@ -4,18 +4,14 @@ The client sends the full message history; the server runs the LiteLLM
 tool-calling loop and returns the assistant reply + updated history.
 """
 import json
-import re
-import sqlite3
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from datetime import datetime
 import database as db
+import finance_tools
+import write_tools
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
-
-# app_settings holds credentials (encrypted, but off-limits regardless).
-_SQL_BLOCKED_TABLES = {"app_settings"}
-_SQL_MAX_ROWS = 200
 
 TOOLS = [
     {"type": "function", "function": {
@@ -79,180 +75,88 @@ TOOLS = [
             "query": {"type": "string", "description": "A single read-only SELECT statement"}
         }, "required": ["query"]},
     }},
+    {"type": "function", "function": {
+        "name": "create_category",
+        "description": (
+            "WRITE: Create a new category only after the user explicitly asks for or approves it. "
+            "If a matching category already exists, returns it without creating a duplicate."
+        ),
+        "parameters": {"type": "object", "properties": {
+            "name": {"type": "string", "description": "Category name"},
+            "color": {"type": "string", "description": "Hex color, e.g. #6b7280"},
+            "is_income": {"type": "boolean", "description": "Whether this category is income"},
+            "is_transfer": {"type": "boolean", "description": "Whether this category is a transfer/excluded category"},
+        }, "required": ["name"]},
+    }},
+    {"type": "function", "function": {
+        "name": "create_keyword_rule",
+        "description": (
+            "WRITE: Create a keyword rule only after the user explicitly asks for or approves it. "
+            "The category must already exist."
+        ),
+        "parameters": {"type": "object", "properties": {
+            "keyword": {"type": "string", "description": "Keyword to match in transaction text"},
+            "category_name": {"type": "string", "description": "Existing category name"},
+            "match_field": {"type": "string", "enum": ["description", "reference", "any"], "description": "Field to match"},
+            "priority": {"type": "integer", "description": "Higher priority rules run first"},
+        }, "required": ["keyword", "category_name"]},
+    }},
+    {"type": "function", "function": {
+        "name": "update_transaction_category",
+        "description": "WRITE: Update one transaction category only after the user explicitly asks for or approves it.",
+        "parameters": {"type": "object", "properties": {
+            "transaction_id": {"type": "integer", "description": "Transaction id"},
+            "category_name": {"type": "string", "description": "Existing category name"},
+        }, "required": ["transaction_id", "category_name"]},
+    }},
+    {"type": "function", "function": {
+        "name": "create_budget",
+        "description": (
+            "WRITE: Create a monthly budget only after the user explicitly asks for or approves it. "
+            "Category must be an existing expense category, or __total__ for all spending."
+        ),
+        "parameters": {"type": "object", "properties": {
+            "category_name": {"type": "string", "description": "Existing expense category name or __total__"},
+            "monthly_amount": {"type": "number", "description": "Budget amount in base currency, greater than 0"},
+            "rollover": {"type": "boolean", "description": "Whether unused budget rolls over"},
+            "active": {"type": "boolean", "description": "Whether budget is active"},
+        }, "required": ["category_name", "monthly_amount"]},
+    }},
+    {"type": "function", "function": {
+        "name": "preview_reapply_keyword_rules",
+        "description": "Preview category changes before reapplying keyword rules to all transactions.",
+        "parameters": {"type": "object", "properties": {
+            "limit": {"type": "integer", "description": "Maximum sample rows to return"},
+        }, "required": []},
+    }},
+    {"type": "function", "function": {
+        "name": "reapply_keyword_rules",
+        "description": (
+            "WRITE: Reapply keyword rules to all transactions only after showing preview_reapply_keyword_rules "
+            "and receiving explicit user approval. Must pass confirm=true."
+        ),
+        "parameters": {"type": "object", "properties": {
+            "confirm": {"type": "boolean", "description": "Must be true after explicit user approval"},
+        }, "required": ["confirm"]},
+    }},
 ]
 
 
-def _tool_get_net_worth_summary(inputs: dict) -> str:
-    import pandas as pd
-    base_currency = db.get_base_currency()
-    df = db.get_balances_df()
-    if df.empty:
-        return json.dumps({"error": "No balance data"})
-    df["date"] = pd.to_datetime(df["date"])
-    latest = df.sort_values("date").groupby("account_id").last().reset_index()
-    total = float(latest["amount_base"].sum())
-    by_type = {k: round(float(v), 2) for k, v in latest.groupby("account_type")["amount_base"].sum().items()}
-    today = df["date"].max()
-
-    def _nw_at(target):
-        sub = df[df["date"] <= target]
-        return float(sub.sort_values("date").groupby("account_id").last()["amount_base"].sum()) if not sub.empty else None
-
-    nw_1m = _nw_at(today - pd.DateOffset(months=1))
-    nw_1y = _nw_at(today - pd.DateOffset(years=1))
-    return json.dumps({
-        "total": round(total, 2), "currency": base_currency, "by_type": by_type,
-        "change_1_month": round(total - nw_1m, 2) if nw_1m is not None else None,
-        "change_1_year": round(total - nw_1y, 2) if nw_1y is not None else None,
-    })
-
-
-def _tool_get_account_balances(inputs: dict) -> str:
-    import pandas as pd
-    base_currency = db.get_base_currency()
-    df = db.get_balances_df()
-    if df.empty:
-        return json.dumps({"accounts": []})
-    df["date"] = pd.to_datetime(df["date"])
-    latest = df.sort_values("date").groupby("account_id").last().reset_index()
-    rows = [{"account": r["account"], "type": r["account_type"], "currency": r["currency"],
-             "amount_base": round(float(r["amount_base"]), 2), "as_of": str(r["date"].date())}
-            for _, r in latest.sort_values("amount_base", ascending=False).iterrows()]
-    return json.dumps({"accounts": rows, "currency": base_currency})
-
-
-def _tool_get_spending_by_category(inputs: dict) -> str:
-    import pandas as pd
-    from dateutil.relativedelta import relativedelta
-    base_currency = db.get_base_currency()
-    months = int(inputs.get("months", 3))
-    end = datetime.today()
-    start = end - relativedelta(months=months)
-    df = db.get_transactions_df(start=start.strftime("%Y-%m-%d"), end=end.strftime("%Y-%m-%d"))
-    expenses = df[df["amount"] < 0].copy() if not df.empty else df
-    if expenses.empty:
-        return json.dumps({"categories": [], "total": 0, "period_months": months})
-    expenses["amount"] = expenses["amount"].abs()
-    total = float(expenses["amount"].sum())
-    by_cat = expenses.groupby("category")["amount"].sum().sort_values(ascending=False)
-    return json.dumps({"categories": [
-        {"category": c, "total": round(float(a), 2), "pct": round(float(a)/total*100, 1)}
-        for c, a in by_cat.items()
-    ], "total": round(total, 2), "period_months": months, "currency": base_currency})
-
-
-def _tool_get_monthly_cash_flow(inputs: dict) -> str:
-    import pandas as pd
-    from dateutil.relativedelta import relativedelta
-    base_currency = db.get_base_currency()
-    months = int(inputs.get("months", 6))
-    end = datetime.today()
-    start = end - relativedelta(months=months)
-    df = db.get_transactions_df(start=start.strftime("%Y-%m-%d"), end=end.strftime("%Y-%m-%d"))
-    if df.empty:
-        return json.dumps({"months": []})
-    df["date"] = pd.to_datetime(df["date"])
-    df["month"] = df["date"].dt.to_period("M").astype(str)
-    income = df[df["amount"] > 0].groupby("month")["amount"].sum()
-    expenses = df[df["amount"] < 0].groupby("month")["amount"].sum().abs()
-    all_months = sorted(set(income.index) | set(expenses.index))
-    return json.dumps({"months": [
-        {"month": m, "income": round(float(income.get(m, 0)), 2),
-         "expenses": round(float(expenses.get(m, 0)), 2),
-         "net": round(float(income.get(m, 0)) - float(expenses.get(m, 0)), 2)}
-        for m in all_months
-    ], "currency": base_currency})
-
-
-def _tool_get_recent_transactions(inputs: dict) -> str:
-    limit = int(inputs.get("limit", 20))
-    df = db.get_transactions_df()
-    if df.empty:
-        return json.dumps({"transactions": []})
-    if inputs.get("category"):
-        df = df[df["category"].str.lower() == inputs["category"].lower()]
-    if inputs.get("account"):
-        df = df[df["account"].str.lower().str.contains(inputs["account"].lower(), na=False)]
-    return json.dumps({"transactions": [
-        {"date": r["date"], "description": r["description"],
-         "amount": round(float(r["amount"]), 2), "category": r["category"], "account": r["account"]}
-        for _, r in df.head(limit).iterrows()
-    ]})
-
-
-def _tool_get_net_worth_trend(inputs: dict) -> str:
-    import pandas as pd
-    from dateutil.relativedelta import relativedelta
-    base_currency = db.get_base_currency()
-    months = int(inputs.get("months", 12))
-    df = db.get_balances_df()
-    if df.empty:
-        return json.dumps({"trend": []})
-    df["date"] = pd.to_datetime(df["date"])
-    cutoff = datetime.today() - relativedelta(months=months)
-    df = df[df["date"] >= cutoff]
-    df["month"] = df["date"].dt.to_period("M").astype(str)
-    trend = [
-        {"month": m, "net_worth": round(float(
-            df[df["month"] == m].sort_values("date").groupby("account_id").last()["amount_base"].sum()
-        ), 2)}
-        for m in sorted(df["month"].unique())
-    ]
-    return json.dumps({"trend": trend, "currency": base_currency})
-
-
-def _tool_get_schema(inputs: dict) -> str:
-    with db.get_connection() as conn:
-        rows = conn.execute(
-            "SELECT name, sql FROM sqlite_master WHERE type='table' "
-            "AND name NOT IN ('app_settings', 'sqlite_sequence') ORDER BY name"
-        ).fetchall()
-    return json.dumps({"tables": [{"name": r["name"], "sql": r["sql"]} for r in rows]})
-
-
-def _tool_run_sql(inputs: dict) -> str:
-    """Execute a read-only, single-statement SELECT. Guards: SELECT/WITH only,
-    secrets table blocked, read-only connection, results row-capped."""
-    query = (inputs.get("query") or "").strip().rstrip(";").strip()
-    if not query:
-        return json.dumps({"error": "Empty query"})
-    if ";" in query:
-        return json.dumps({"error": "Only a single statement is allowed"})
-    low = query.lower()
-    if not (low.startswith("select") or low.startswith("with")):
-        return json.dumps({"error": "Only SELECT queries are allowed (read-only)"})
-    for table in _SQL_BLOCKED_TABLES:
-        if re.search(rf"\b{re.escape(table)}\b", low):
-            return json.dumps({"error": f"The {table} table is not accessible"})
-
-    try:
-        conn = sqlite3.connect(f"file:{db.DB_PATH}?mode=ro", uri=True)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA query_only = ON")
-        try:
-            cur = conn.execute(query)
-            fetched = cur.fetchmany(_SQL_MAX_ROWS + 1)
-            columns = [d[0] for d in cur.description] if cur.description else []
-        finally:
-            conn.close()
-    except sqlite3.Error as e:
-        return json.dumps({"error": f"SQL error: {e}"})
-
-    truncated = len(fetched) > _SQL_MAX_ROWS
-    rows = [dict(r) for r in fetched[:_SQL_MAX_ROWS]]
-    return json.dumps({"columns": columns, "rows": rows, "row_count": len(rows),
-                       "truncated": truncated}, default=str)
-
-
 _TOOL_HANDLERS: dict = {
-    "get_net_worth_summary":    _tool_get_net_worth_summary,
-    "get_account_balances":     _tool_get_account_balances,
-    "get_spending_by_category": _tool_get_spending_by_category,
-    "get_monthly_cash_flow":    _tool_get_monthly_cash_flow,
-    "get_recent_transactions":  _tool_get_recent_transactions,
-    "get_net_worth_trend":      _tool_get_net_worth_trend,
-    "get_schema":               _tool_get_schema,
-    "run_sql":                  _tool_run_sql,
+    "get_net_worth_summary":    finance_tools.get_net_worth_summary,
+    "get_account_balances":     finance_tools.get_account_balances,
+    "get_spending_by_category": finance_tools.get_spending_by_category,
+    "get_monthly_cash_flow":    finance_tools.get_monthly_cash_flow,
+    "get_recent_transactions":  finance_tools.get_recent_transactions,
+    "get_net_worth_trend":      finance_tools.get_net_worth_trend,
+    "get_schema":               finance_tools.get_schema,
+    "run_sql":                  finance_tools.run_sql,
+    "create_category":          write_tools.create_category,
+    "create_keyword_rule":      write_tools.create_keyword_rule,
+    "update_transaction_category": write_tools.update_transaction_category,
+    "create_budget":            write_tools.create_budget,
+    "preview_reapply_keyword_rules": write_tools.preview_reapply_keyword_rules,
+    "reapply_keyword_rules":    write_tools.reapply_keyword_rules,
 }
 
 
@@ -289,6 +193,8 @@ def chat(body: ChatRequest):
         "Prefer the specific tools (net worth, balances, spending, cash flow, transactions, trend) for common "
         "questions. For anything they don't cover, use run_sql with a read-only SELECT — call get_schema first "
         "if you're unsure of the exact table or column names. "
+        "Some tools can write data. Never call a WRITE tool unless the user explicitly asks you to make that "
+        "change or has approved a specific proposed change. For bulk recategorization, always preview first. "
         "Be concise: 1-3 short paragraphs or a bullet list. Use the base currency symbol for amounts."
     )
     if body.page_context:

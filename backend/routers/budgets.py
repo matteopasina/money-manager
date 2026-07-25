@@ -3,6 +3,9 @@ Monthly budgets: per-category spending caps with optional rollover.
 
 Spending semantics match the rest of the app: amount < 0, category not in the
 income/transfer set, amounts in base currency via COALESCE(amount_base, amount).
+This is the same definition as domain.spending_frame()/domain.base_amount(),
+used by finance_tools.py and assistant_tools.py — this router computes it in
+SQL rather than pandas, but if the definition changes, change it in both places.
 Rollover carry is derived on read from start_month — nothing is stored, so
 editing the amount or the rollover flag recomputes history retroactively.
 """

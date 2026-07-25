@@ -218,7 +218,7 @@ def fire_projection(params: FireParams):
             target_month = i + 1
 
     detected_expenses = db.get_transaction_monthly_spend()
-    monthly_expenses = params.monthly_expenses or detected_expenses
+    monthly_expenses = params.monthly_expenses if params.monthly_expenses is not None else detected_expenses
     fire_number = monthly_expenses * 12 / (params.withdrawal_rate_pct / 100)
 
     # Detected values — shown in UI so user can understand the auto-calculation
@@ -229,6 +229,7 @@ def fire_projection(params: FireParams):
     return {
         "current_nw": round(current_nw, 2),
         "monthly_contribution": round(monthly_contrib, 2),
+        "monthly_expenses": round(monthly_expenses, 2),
         "fire_number": round(fire_number, 2),
         "target_amount": params.target_amount,
         "months_to_target": target_month,

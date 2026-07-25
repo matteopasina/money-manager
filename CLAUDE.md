@@ -40,17 +40,27 @@ docker run -p 8000:8000 -v $(pwd)/finances.db:/app/finances.db -v $(pwd)/finance
 source .venv/bin/activate
 pytest backend/tests/ -v
 
+# Single backend test file / test
+pytest backend/tests/test_write_tools.py -v
+pytest backend/tests/test_write_tools.py::test_create_category -v
+
 # Frontend (vitest)
 cd frontend && npm test
+
+# Frontend lint / typecheck
+cd frontend && npm run lint
+cd frontend && npx tsc -b
 ```
 
 ## Architecture
 
-**Backend**: FastAPI app at `backend/main.py`. SQLite via `backend/database.py`. DB path defaults to `finances.db`, overridable via `DB_PATH` env var.
+**Backend**: FastAPI app at `backend/main.py`. SQLite via `backend/database.py`. DB path defaults to `finances.db`, overridable via `DB_PATH` env var. Routers live in `backend/routers/` (one per resource: `accounts`, `balances`, `transactions`, `categories`, `budgets`, `import_`, `sync`, `bbva`, `binance`, `ib`, `revolut`, `settings`, `chat`, `assistant`, `analytics`).
 
-**Frontend**: React 19 + TypeScript + Vite at `frontend/`. API client at `frontend/src/api/client.ts`. Pages in `frontend/src/pages/`. Shared UI components in `frontend/src/components/` (including `LoadingSpinner` and `Alert`).
+**Frontend**: React 19 + TypeScript + Vite at `frontend/`. API client at `frontend/src/api/client.ts`. Pages in `frontend/src/pages/`. Shared UI components in `frontend/src/components/` (including `LoadingSpinner` and `Alert`). Theme (light/dark) is driven by `frontend/src/theme.ts` + `useTheme.ts`/`ThemeContext.tsx`, not raw CSS media queries.
 
 **Single-process deployment**: `npm run build` outputs to `backend/static/dist/`; FastAPI serves it as static files. One Docker container.
+
+**Finance domain logic is shared, not duplicated per-surface**: `backend/finance_tools.py` (read-only queries: net worth, spending, cash flow, schema, `run_sql`) and `backend/write_tools.py` (guarded mutations: categories, keyword rules, budgets, recategorisation) are the single implementation of "things an assistant can do to your finances." Both the in-app AI chat (`backend/routers/chat.py`) and the standalone MCP server (`backend/mcp_server.py`) wrap these same modules rather than reimplementing logic — when adding a new finance operation for the assistant, add it once in `finance_tools.py`/`write_tools.py` and expose it from both callers. `backend/assistant_tools.py` backs the proactive insights shown in `routers/assistant.py` (surfaced in `FinancialHelper.tsx`), separate from the chat/MCP tool-calling path.
 
 ## Key tables
 
@@ -66,11 +76,15 @@ cd frontend && npm test
 
 ## Adapters
 
-Drop a `.py` file in `backend/adapters/` implementing `BaseAdapter` (see `backend/adapters/base.py`). It auto-discovers on startup and appears in the Import UI. Each adapter declares `NAME`, `FILE_TYPES`, and `IMPORTS` (typed as `Literal["transactions", "balances"]`).
+Drop a `.py` file in `backend/adapters/` implementing `BaseAdapter` (see `backend/adapters/base.py`). It auto-discovers on startup and appears in the Import UI. Each adapter declares `NAME`, `FILE_TYPES`, and `IMPORTS` (typed as `Literal["transactions", "balances"]`). Built-in adapters: `bbva.py`, `binance.py`, `interactive_brokers.py`, `snapshot_csv.py`.
 
 ## AI Chat
 
-Configured via app settings (`llm_model`, `llm_api_key`). Uses LiteLLM so any provider works (e.g. `gemini/gemini-2.0-flash`, `gpt-4o`, `claude-3-5-sonnet-20241022`). The chat endpoint is stateless — client sends full message history each request. The API key is read server-side from `app_settings`; it is never sent by the frontend.
+Configured via app settings (`llm_model`, `llm_api_key`). Uses LiteLLM so any provider works (e.g. `gemini/gemini-2.0-flash`, `gpt-4o`, `claude-3-5-sonnet-20241022`). The chat endpoint is stateless — client sends full message history each request. The API key is read server-side from `app_settings`; it is never sent by the frontend. Tool calling in `chat.py` dispatches to the `finance_tools`/`write_tools` functions described above, plus a guarded `run_sql` tool (single `SELECT`/`WITH` only, blocks `app_settings`, read-only SQLite connection, 200-row cap).
+
+## MCP server
+
+`backend/mcp_server.py` exposes the same finance/write tools over MCP (stdio) for external AI assistants, independent of the in-app chat. Run with `make mcp` or `python -m backend.mcp_server`; point an MCP client at that stdio command with `DB_PATH` set if the DB isn't in the cwd. The main app should create/migrate the database first — the MCP process only opens it.
 
 ## Key constraints
 

@@ -1,4 +1,5 @@
 import PlotlyImport from 'react-plotly.js'
+import { useTheme } from '../useTheme'
 // react-plotly.js is CJS; Vite's interop may wrap it — unwrap if needed
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const Plot = ((PlotlyImport as any).default ?? PlotlyImport) as typeof PlotlyImport
@@ -10,7 +11,7 @@ const LIGHT_LAYOUT = {
   paper_bgcolor: 'rgba(0,0,0,0)',
   plot_bgcolor:  'rgba(0,0,0,0)',
   font: { family: FONT_FAMILY, color: '#A89D88', size: 10.5 },
-  margin: { t: 36, b: 50, l: 0, r: 0 },
+  margin: { t: 36, b: 50, l: 52, r: 0 },
   xaxis: {
     gridcolor: '#E7DECC', linecolor: '#E7DECC',
     tickfont: { color: '#A89D88', size: 10.5, family: FONT_FAMILY },
@@ -34,7 +35,7 @@ const DARK_LAYOUT = {
   paper_bgcolor: 'rgba(0,0,0,0)',
   plot_bgcolor:  'rgba(0,0,0,0)',
   font: { family: FONT_FAMILY, color: '#8C8068', size: 10.5 },
-  margin: { t: 36, b: 50, l: 0, r: 0 },
+  margin: { t: 36, b: 50, l: 52, r: 0 },
   xaxis: {
     gridcolor: '#3A3328', linecolor: '#3A3328',
     tickfont: { color: '#8C8068', size: 10.5, family: FONT_FAMILY },
@@ -61,7 +62,8 @@ interface Props {
 }
 
 export default function MoneyChart({ data, layout = {}, style, config }: Props) {
-  const base = document.documentElement.dataset.theme === 'dark' ? DARK_LAYOUT : LIGHT_LAYOUT
+  const { isDark } = useTheme()
+  const base = isDark ? DARK_LAYOUT : LIGHT_LAYOUT
   const merged = {
     ...base,
     ...layout,
@@ -74,7 +76,7 @@ export default function MoneyChart({ data, layout = {}, style, config }: Props) 
     <Plot
       data={data}
       layout={merged as Partial<Plotly.Layout>}
-      style={{ width: '100%', ...style }}
+      style={{ width: '100%', minWidth: 0, ...style }}
       config={{ displayModeBar: false, responsive: true, ...config }}
       useResizeHandler
     />
@@ -105,13 +107,3 @@ export const ACCOUNT_PALETTE = [
   '#8C9A6B', '#9A6B4A', '#7A8C6B', '#B0915C', '#5C7A6E',
 ]
 
-// eslint-disable-next-line react-refresh/only-export-components
-export function fmt(n: number, currency = 'EUR') {
-  return new Intl.NumberFormat('en-GB', { style: 'currency', currency, maximumFractionDigits: 0 }).format(n)
-}
-
-// Plain numeric amount — 2 decimal places, locale thousands separator, no currency symbol.
-// eslint-disable-next-line react-refresh/only-export-components
-export function fmtAmount(n: number) {
-  return new Intl.NumberFormat('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
-}

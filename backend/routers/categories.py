@@ -58,6 +58,12 @@ def delete_category(category_id: int):
     return {"ok": True}
 
 
+@router.post("/reset-colors")
+def reset_colors():
+    updated = db.reset_default_category_colors()
+    return {"updated": updated}
+
+
 # ── Keyword rules ──────────────────────────────────────────────────────────────
 
 @router.get("/rules")

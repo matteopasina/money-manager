@@ -1,18 +1,16 @@
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api, type BalanceRow, type Account, type FxRate } from '../api/client'
+import { api } from '../api/client'
 import LoadingSpinner from '../components/LoadingSpinner'
 import Alert from '../components/Alert'
-import { fmtAmount } from '../components/MoneyChart'
+import { fmtAmount } from '../utils/money'
+import { todayLocal } from '../utils/date'
+import { useApi } from '../hooks/useApi'
 
 type SortKey = 'date' | 'account' | 'amount_native' | 'amount_base'
 
 export default function Balances() {
   const navigate = useNavigate()
-  const [rows, setRows]           = useState<BalanceRow[]>([])
-  const [accounts, setAccounts]   = useState<Account[]>([])
-  const [fxRates, setFxRates]     = useState<FxRate[]>([])
-  const [loading, setLoading]     = useState(true)
   const [filterAccount, setFilterAccount] = useState('')
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editVals, setEditVals]   = useState({ amount_native: '', amount_base: '' })
@@ -22,38 +20,38 @@ export default function Balances() {
   const [sortDir, setSortDir]     = useState<'asc' | 'desc'>('desc')
 
   const [showAddForm, setShowAddForm] = useState(false)
-  const today = new Date().toISOString().slice(0, 10)
   const [addForm, setAddForm] = useState({
     account_id: '',
-    date: today,
+    date: todayLocal(),
     amount_native: '',
     amount_base: '',
   })
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    const [b, a, fx] = await Promise.all([api.balances.list(), api.accounts.list(true), api.accounts.fxRates()])
-    setRows(b)
-    setAccounts(a)
-    setFxRates(fx)
-    setLoading(false)
-  }, [])
-
-  useEffect(() => { load() }, [load])
+  const { data: loaded, loading, error, reload } = useApi(
+    () => Promise.all([
+      api.balances.list(), api.accounts.list(true), api.accounts.fxRates(), api.settings.all(),
+    ]),
+    [],
+  )
+  const rows = useMemo(() => loaded?.[0] ?? [], [loaded])
+  const accounts = useMemo(() => loaded?.[1] ?? [], [loaded])
+  const fxRates = useMemo(() => loaded?.[2] ?? [], [loaded])
+  const baseCurrency = loaded ? (loaded[3].base_currency ?? 'EUR') : 'EUR'
 
   const selectedAddAccount = accounts.find(a => String(a.id) === addForm.account_id)
 
-  function getRate(currency: string): number {
-    if (currency === 'EUR') return 1
+  // null means "no FX rate on file" — callers must not silently treat that as 1:1.
+  function getRate(currency: string): number | null {
+    if (currency === baseCurrency) return 1
     const r = fxRates.find(f => f.currency === currency)
-    return r?.rate_to_base ?? 1
+    return r?.rate_to_base ?? null
   }
 
   function onAddAmountNativeChange(value: string) {
     const native = parseFloat(value)
     if (!isNaN(native) && selectedAddAccount) {
       const rate = getRate(selectedAddAccount.currency)
-      setAddForm(f => ({ ...f, amount_native: value, amount_base: (native * rate).toFixed(2) }))
+      setAddForm(f => ({ ...f, amount_native: value, amount_base: rate === null ? '' : (native * rate).toFixed(2) }))
     } else {
       setAddForm(f => ({ ...f, amount_native: value }))
     }
@@ -63,14 +61,19 @@ export default function Balances() {
     const acct = accounts.find(a => String(a.id) === id)
     setAddForm(f => {
       const native = parseFloat(f.amount_native)
-      const base = acct && !isNaN(native) ? (native * getRate(acct.currency)).toFixed(2) : f.amount_base
-      return { ...f, account_id: id, amount_base: base }
+      if (!acct || isNaN(native)) return { ...f, account_id: id }
+      const rate = getRate(acct.currency)
+      return { ...f, account_id: id, amount_base: rate === null ? '' : (native * rate).toFixed(2) }
     })
   }
 
   async function submitAdd(e: React.FormEvent) {
     e.preventDefault()
     if (!addForm.account_id || !addForm.date || !addForm.amount_native) return
+    if (isAddNonBase && !addForm.amount_base) {
+      setMsg({ type: 'error', text: `No FX rate on file for ${selectedAddAccount?.currency}. Set one on the Accounts & FX page, or enter the ${baseCurrency} amount manually above.` })
+      return
+    }
     setSaving(true)
     setMsg(null)
     try {
@@ -78,11 +81,11 @@ export default function Balances() {
         account_id: Number(addForm.account_id),
         date: addForm.date,
         amount_native: parseFloat(addForm.amount_native),
-        amount_base: parseFloat(addForm.amount_base) || parseFloat(addForm.amount_native),
+        amount_base: isAddNonBase ? parseFloat(addForm.amount_base) : parseFloat(addForm.amount_native),
       })
       setMsg({ type: 'success', text: 'Balance recorded.' })
       setAddForm(f => ({ ...f, amount_native: '', amount_base: '' }))
-      await load()
+      reload()
     } catch (e: unknown) {
       setMsg({ type: 'error', text: e instanceof Error ? e.message : String(e) })
     } finally {
@@ -99,7 +102,7 @@ export default function Balances() {
       await api.balances.update(id, { amount_native: native, amount_base: base })
       setEditingId(null)
       setMsg({ type: 'success', text: 'Balance updated.' })
-      await load()
+      reload()
     } catch (e: unknown) {
       setMsg({ type: 'error', text: e instanceof Error ? e.message : String(e) })
     } finally {
@@ -113,7 +116,7 @@ export default function Balances() {
     try {
       await api.balances.delete(id)
       setMsg({ type: 'success', text: 'Balance deleted.' })
-      await load()
+      reload()
     } catch (e: unknown) {
       setMsg({ type: 'error', text: e instanceof Error ? e.message : String(e) })
     } finally {
@@ -140,9 +143,17 @@ export default function Balances() {
     })
   }, [rows, filterAccount, sortKey, sortDir])
 
-  const isAddNonBase = selectedAddAccount && selectedAddAccount.currency !== 'EUR'
+  const isAddNonBase = Boolean(selectedAddAccount) && selectedAddAccount!.currency !== baseCurrency
+  const missingRate = isAddNonBase && getRate(selectedAddAccount!.currency) === null
 
   if (loading) return <LoadingSpinner />
+
+  if (error) return (
+    <div>
+      <div className="page-header"><h1>Balances</h1></div>
+      <Alert type="error">Couldn't load balances: {error}</Alert>
+    </div>
+  )
 
   return (
     <div>
@@ -191,10 +202,10 @@ export default function Balances() {
             {isAddNonBase && (
               <div className="form-group" style={{ maxWidth: 340, marginTop: '0.9rem' }}>
                 <label>
-                  Amount in base currency (EUR)
-                  {fxRates.find(f => f.currency === selectedAddAccount.currency) && (
+                  Amount in base currency ({baseCurrency})
+                  {!missingRate && (
                     <span style={{ color: 'var(--ink-faint)', fontWeight: 400, marginLeft: 8 }}>
-                      · rate 1 {selectedAddAccount.currency} = {getRate(selectedAddAccount.currency)} EUR
+                      · rate 1 {selectedAddAccount!.currency} = {getRate(selectedAddAccount!.currency)} {baseCurrency}
                     </span>
                   )}
                 </label>
@@ -203,10 +214,15 @@ export default function Balances() {
                   value={addForm.amount_base}
                   onChange={e => setAddForm(f => ({ ...f, amount_base: e.target.value }))}
                 />
+                {missingRate && (
+                  <p style={{ fontSize: '0.75rem', color: 'var(--loss)', marginTop: 4 }}>
+                    No FX rate on file for {selectedAddAccount!.currency}. <a href="/accounts" onClick={e => { e.preventDefault(); navigate('/accounts') }}>Set one on Accounts &amp; FX</a>, or enter the {baseCurrency} amount above.
+                  </p>
+                )}
               </div>
             )}
 
-            <button className="btn btn-primary" type="submit" disabled={saving} style={{ marginTop: '1.1rem' }}>
+            <button className="btn btn-primary" type="submit" disabled={saving || (missingRate && !addForm.amount_base)} style={{ marginTop: '1.1rem' }}>
               {saving ? 'Saving…' : 'Record Balance'}
             </button>
           </form>

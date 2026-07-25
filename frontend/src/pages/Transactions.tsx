@@ -1,25 +1,37 @@
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, type TransactionRow, type Account, type Category } from '../api/client'
 import LoadingSpinner from '../components/LoadingSpinner'
-import MoneyChart, { fmtAmount } from '../components/MoneyChart'
+import Alert from '../components/Alert'
+import MoneyChart from '../components/MoneyChart'
+import { fmtAmount, fmt } from '../utils/money'
+import { useTheme } from '../useTheme'
+import { useApi } from '../hooks/useApi'
+
+// Amount in base currency — falls back to the native amount for rows that
+// predate FX support. Used for every aggregate/chart; the per-row table cell
+// shows the native amount instead, next to the account's own currency.
+function baseAmount(r: TransactionRow): number {
+  return r.amount_base ?? r.amount
+}
 
 function buildCashFlowTraces(rows: TransactionRow[], transferCats: Set<string>) {
   const byMonth: Record<string, { income: number; spend: number; invest: number }> = {}
   for (const r of rows) {
     const month = r.date.slice(0, 7)
     if (!byMonth[month]) byMonth[month] = { income: 0, spend: 0, invest: 0 }
+    const amount = baseAmount(r)
     if (r.category === 'Trade') {
       // Brokerage trades are cash→asset conversions inside an account: the money
       // was already counted as invested when it was transferred in. Skip entirely.
     } else if (transferCats.has(r.category ?? '')) {
       // A transfer between own accounts produces two rows (outgoing + incoming).
       // Only count the outgoing leg — the incoming leg is the same money, not new activity.
-      if (r.amount < 0) byMonth[month].invest += Math.abs(r.amount)
-    } else if (r.amount > 0) {
-      byMonth[month].income += r.amount
+      if (amount < 0) byMonth[month].invest += Math.abs(amount)
+    } else if (amount > 0) {
+      byMonth[month].income += amount
     } else {
-      byMonth[month].spend += Math.abs(r.amount)
+      byMonth[month].spend += Math.abs(amount)
     }
   }
   const months = Object.keys(byMonth).sort()
@@ -30,62 +42,70 @@ function buildCashFlowTraces(rows: TransactionRow[], transferCats: Set<string>) 
   ]
 }
 
-function buildCategoryTrace(rows: TransactionRow[], categories: Category[]) {
+function buildCategoryTrace(rows: TransactionRow[], categories: Category[], transferCats: Set<string>, isDark: boolean) {
   const colorMap = Object.fromEntries(categories.map(c => [c.name, c.color]))
   const byCategory: Record<string, number> = {}
   for (const r of rows) {
-    if (r.amount >= 0) continue
+    const amount = baseAmount(r)
+    if (amount >= 0) continue
+    if (transferCats.has(r.category ?? '')) continue
     const cat = r.category ?? 'Uncategorized'
-    byCategory[cat] = (byCategory[cat] ?? 0) + Math.abs(r.amount)
+    byCategory[cat] = (byCategory[cat] ?? 0) + Math.abs(amount)
   }
-  const labels = Object.keys(byCategory)
+  // Group anything under 3% of the total into "Other" so small slices don't
+  // clip their labels off the edge of the card.
+  const total = Object.values(byCategory).reduce((s, v) => s + v, 0)
+  const grouped: Record<string, number> = {}
+  for (const [cat, value] of Object.entries(byCategory)) {
+    const key = total > 0 && value / total < 0.03 ? 'Other' : cat
+    grouped[key] = (grouped[key] ?? 0) + value
+  }
+  const labels = Object.keys(grouped)
   return [{
     labels,
-    values: labels.map(l => byCategory[l]),
+    values: labels.map(l => grouped[l]),
     type: 'pie' as const,
     hole: 0.6,
-    marker: { colors: labels.map(l => colorMap[l] ?? '#A88B5C'), line: { color: '#F6F1E7', width: 2 } },
+    marker: { colors: labels.map(l => colorMap[l] ?? '#A88B5C'), line: { color: isDark ? '#242019' : '#F6F1E7', width: 2 } },
     textinfo: 'label+percent' as const,
+    textposition: 'inside' as const,
+    insidetextorientation: 'horizontal' as const,
     textfont: { size: 11, family: "'Hanken Grotesk', sans-serif" },
     hovertemplate: '%{label}: %{value:,.0f}<extra></extra>',
   }]
 }
 
 export default function Transactions() {
-  const [rows, setRows]           = useState<TransactionRow[]>([])
   const [accounts, setAccounts]   = useState<Account[]>([])
-  const [categories, setCategories] = useState<Category[]>([])
-  const [loading, setLoading]     = useState(true)
+  const [baseCurrency, setBaseCurrency] = useState('EUR')
   const [filters, setFilters]     = useState({ account_id: '', start: '', end: '', search: '', category: '' })
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editCat, setEditCat]     = useState('')
   const navigate = useNavigate()
+  const { isDark } = useTheme()
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    const params: { account_id?: number; start?: string; end?: string } = {}
-    if (filters.account_id) params.account_id = Number(filters.account_id)
-    if (filters.start) params.start = filters.start
-    if (filters.end) params.end = filters.end
-    const [txns, cats] = await Promise.all([
-      api.transactions.list(params),
-      api.categories.list(),
-    ])
-    setRows(txns)
-    setCategories(cats)
-    setLoading(false)
-  }, [filters.account_id, filters.start, filters.end])
+  const { data: loaded, loading, error, reload } = useApi(
+    () => {
+      const params: { account_id?: number; start?: string; end?: string } = {}
+      if (filters.account_id) params.account_id = Number(filters.account_id)
+      if (filters.start) params.start = filters.start
+      if (filters.end) params.end = filters.end
+      return Promise.all([api.transactions.list(params), api.categories.list()])
+    },
+    [filters.account_id, filters.start, filters.end],
+  )
+  const rows = useMemo(() => loaded?.[0] ?? [], [loaded])
+  const categories = useMemo(() => loaded?.[1] ?? [], [loaded])
 
   useEffect(() => {
     api.accounts.list().then(setAccounts)
+    api.settings.all().then(s => setBaseCurrency(s.base_currency ?? 'EUR'))
   }, [])
 
-  useEffect(() => { load() }, [load]) // eslint-disable-line react-hooks/set-state-in-effect
-
   async function saveCategory(id: number) {
-    await api.transactions.updateCategory(id, editCat)
+    await api.transactions.updateCategory(id, editCat || null)
     setEditingId(null)
-    await load()
+    reload()
   }
 
   function categoryColor(name: string | null) {
@@ -106,11 +126,12 @@ export default function Transactions() {
   }, [rows, filters.search, filters.category])
 
   const transferCats   = useMemo(() => new Set(categories.filter(c => c.is_transfer).map(c => c.name)), [categories])
-  const totalIncome    = visible.filter(r => r.amount > 0 && !transferCats.has(r.category ?? '')).reduce((s, r) => s + r.amount, 0)
-  const totalSpend     = visible.filter(r => r.amount < 0 && !transferCats.has(r.category ?? '')).reduce((s, r) => s + r.amount, 0)
-  const totalInvest    = visible.filter(r => r.category !== 'Trade' && transferCats.has(r.category ?? '') && r.amount < 0).reduce((s, r) => s + Math.abs(r.amount), 0)
+  const totalIncome    = visible.filter(r => baseAmount(r) > 0 && !transferCats.has(r.category ?? '')).reduce((s, r) => s + baseAmount(r), 0)
+  const totalSpend     = visible.filter(r => baseAmount(r) < 0 && !transferCats.has(r.category ?? '')).reduce((s, r) => s + baseAmount(r), 0)
+  const totalInvest    = visible.filter(r => r.category !== 'Trade' && transferCats.has(r.category ?? '') && baseAmount(r) < 0).reduce((s, r) => s + Math.abs(baseAmount(r)), 0)
   const cashFlowTraces = useMemo(() => buildCashFlowTraces(visible, transferCats), [visible, transferCats])
-  const categoryTraces = useMemo(() => buildCategoryTrace(visible, categories), [visible, categories])
+  const categoryTraces = useMemo(() => buildCategoryTrace(visible, categories, transferCats, isDark), [visible, categories, transferCats, isDark])
+  const accountCurrency = useMemo(() => Object.fromEntries(accounts.map(a => [a.id, a.currency])), [accounts])
 
   return (
     <div>
@@ -121,6 +142,8 @@ export default function Transactions() {
         </div>
         <button className="btn btn-primary" onClick={() => navigate('/import')}>↥ Import statement</button>
       </div>
+
+      {error && <Alert type="error">Couldn't load transactions: {error}</Alert>}
 
       <div className="filter-bar" style={{ marginBottom: '18px' }}>
         <div className="filter-pill">
@@ -136,9 +159,9 @@ export default function Transactions() {
           </select>
         </div>
         <div className="filter-pill">
-          <input type="date" value={filters.start} onChange={e => setFilters(f => ({ ...f, start: e.target.value }))} style={{ width: 'auto' }} />
+          <input type="date" value={filters.start} onChange={e => setFilters(f => ({ ...f, start: e.target.value }))} />
           <span style={{ color: 'var(--ink-ghost)' }}>–</span>
-          <input type="date" value={filters.end} onChange={e => setFilters(f => ({ ...f, end: e.target.value }))} style={{ width: 'auto' }} />
+          <input type="date" value={filters.end} onChange={e => setFilters(f => ({ ...f, end: e.target.value }))} />
         </div>
         <div className="filter-search">
           <span className="filter-search-icon">⌕</span>
@@ -158,19 +181,19 @@ export default function Transactions() {
         <div className="card">
           <div className="metric-label">Income</div>
           <div className="metric-value" style={{ marginTop: '8px', color: 'var(--gain)' }}>
-            +{fmtAmount(totalIncome)}
+            +{fmt(totalIncome, baseCurrency, { decimals: 2 })}
           </div>
         </div>
         <div className="card">
           <div className="metric-label">Spending</div>
           <div className="metric-value" style={{ marginTop: '8px', color: 'var(--loss)' }}>
-            {fmtAmount(totalSpend)}
+            {fmt(totalSpend, baseCurrency, { decimals: 2 })}
           </div>
         </div>
         <div className="card">
           <div className="metric-label">Invested</div>
           <div className="metric-value" style={{ marginTop: '8px', color: 'var(--accent)' }}>
-            {fmtAmount(totalInvest)}
+            {fmt(totalInvest, baseCurrency, { decimals: 2 })}
           </div>
         </div>
       </div>
@@ -224,6 +247,11 @@ export default function Transactions() {
                     color: r.amount < 0 ? 'var(--ink)' : 'var(--gain)',
                   }}>
                     {r.amount >= 0 ? '+' : ''}{fmtAmount(r.amount)}
+                    {accountCurrency[r.account_id] && (
+                      <span style={{ marginLeft: 4, fontWeight: 400, fontSize: '11px', color: 'var(--ink-faint)' }}>
+                        {accountCurrency[r.account_id]}
+                      </span>
+                    )}
                   </td>
                   <td style={{ fontSize: '12px', color: 'var(--ink-muted)' }}>{r.account}</td>
                   <td>

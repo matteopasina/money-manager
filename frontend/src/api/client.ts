@@ -4,14 +4,34 @@ const BASE = '/api'
 // keys) instead of their real values — secrets are write-only from the browser.
 export const SECRET_MASK = '__secret__'
 
+// FastAPI error bodies are {"detail": "message"} for HTTPException, or
+// {"detail": [{msg, ...}, ...]} for Pydantic validation errors. Pull a
+// readable message out of either shape instead of showing the raw JSON.
+function extractErrorMessage(text: string): string {
+  try {
+    const body = JSON.parse(text) as { detail?: unknown }
+    if (typeof body.detail === 'string') return body.detail
+    if (Array.isArray(body.detail)) {
+      const messages = body.detail
+        .map(d => (d && typeof d === 'object' && 'msg' in d ? String((d as { msg: unknown }).msg) : null))
+        .filter((m): m is string => m !== null)
+      if (messages.length) return messages.join('; ')
+    }
+  } catch {
+    // not JSON — fall through to the raw text
+  }
+  return text
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const isFormData = init?.body instanceof FormData
   const res = await fetch(BASE + path, {
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
+    headers: isFormData ? { ...init?.headers } : { 'Content-Type': 'application/json', ...init?.headers },
     ...init,
   })
   if (!res.ok) {
     const text = await res.text()
-    throw new Error(`${res.status} ${res.statusText}: ${text}`)
+    throw new Error(`${res.status}: ${extractErrorMessage(text)}`)
   }
   return res.json()
 }
@@ -52,14 +72,10 @@ export const api = {
       if (params.end) q.set('end', params.end)
       return request<TransactionRow[]>(`/transactions?${q}`)
     },
-    updateCategory: (id: number, category: string) =>
+    updateCategory: (id: number, category: string | null) =>
       request<void>(`/transactions/${id}/category`, {
         method: 'PATCH', body: JSON.stringify({ category }),
       }),
-    monthlySpend: (months = 6) =>
-      request<{ monthly_spend: number }>(`/transactions/monthly-spend?months=${months}`),
-    avgIncome: () =>
-      request<{ mean: number; median: number }>('/transactions/avg-income'),
   },
 
   // Categories
@@ -71,6 +87,8 @@ export const api = {
       request<void>(`/categories/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
     delete: (id: number) =>
       request<void>(`/categories/${id}`, { method: 'DELETE' }),
+    resetColors: () =>
+      request<{ updated: number }>('/categories/reset-colors', { method: 'POST' }),
     rules: {
       list: () => request<KeywordRule[]>('/categories/rules'),
       create: (body: KeywordRuleIn) =>
@@ -111,9 +129,9 @@ export const api = {
   import: {
     adapters: () => request<AdapterInfo[]>('/import/adapters'),
     preview: (formData: FormData) =>
-      fetch(BASE + '/import/preview', { method: 'POST', body: formData }).then(r => r.json()),
+      request<ImportPreviewResult>('/import/preview', { method: 'POST', body: formData }),
     confirm: (formData: FormData) =>
-      fetch(BASE + '/import/confirm', { method: 'POST', body: formData }).then(r => r.json()),
+      request<ImportConfirmResult>('/import/confirm', { method: 'POST', body: formData }),
   },
 
   // Analytics
@@ -215,6 +233,15 @@ export const api = {
     request<{ reply: string; messages: ChatMessage[] }>('/chat', {
       method: 'POST', body: JSON.stringify(body),
     }),
+
+  // Financial helper
+  assistant: {
+    insights: () => request<AssistantInsights>('/assistant/insights'),
+    review: (month?: string) =>
+      request<AssistantReview>(`/assistant/review${month ? `?month=${encodeURIComponent(month)}` : ''}`),
+    cleanup: (limit = 80) =>
+      request<AssistantCleanup>(`/assistant/cleanup?limit=${limit}`),
+  },
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -302,6 +329,31 @@ export interface AdapterInfo {
   imports: string
 }
 
+export interface ImportPreviewTransactionRow {
+  date: string
+  description: string
+  amount: number
+  category: string | null
+  reference: string | null
+}
+
+export interface ImportPreviewBalanceRow {
+  date: string
+  amount_native: number
+  amount_base: number
+}
+
+export interface ImportPreviewResult {
+  total: number
+  imports: 'transactions' | 'balances'
+  preview: ImportPreviewTransactionRow[] | ImportPreviewBalanceRow[]
+}
+
+export interface ImportConfirmResult {
+  inserted: number
+  skipped: number
+}
+
 export interface ForecastResult {
   historical: { date: string; amount: number }[]
   forecast: { date: string; amount: number }[]
@@ -320,6 +372,7 @@ export interface FireParams {
 export interface FireResult {
   current_nw: number
   monthly_contribution: number
+  monthly_expenses: number
   fire_number: number
   target_amount: number
   months_to_target: number | null
@@ -427,4 +480,84 @@ export interface ChatMessage {
   content: string
   tool_calls?: unknown[]
   tool_call_id?: string
+}
+
+export interface AssistantInsight {
+  title: string
+  body: string
+  severity: 'info' | 'good' | 'warning'
+  action_label: string | null
+  action_prompt: string | null
+}
+
+export interface AssistantInsights {
+  insights: AssistantInsight[]
+  generated_at: string
+  ai_enabled: boolean
+}
+
+export interface AssistantEvidenceTransaction {
+  id: number
+  date: string
+  description: string
+  amount: number
+  amount_base: number | null
+  category: string | null
+  account: string
+  account_id: number
+}
+
+export interface AssistantAction {
+  type: string
+  label: string
+  payload: Record<string, unknown>
+}
+
+export interface AssistantCleanupGroup {
+  merchant: string
+  count: number
+  total_spend: number
+  suggested_category: string | null
+  evidence: AssistantEvidenceTransaction[]
+  actions: AssistantAction[]
+}
+
+export interface AssistantCleanup {
+  currency: string
+  total: number
+  groups: AssistantCleanupGroup[]
+}
+
+export interface AssistantBudgetRisk {
+  category_name: string
+  spent: number
+  monthly_amount: number
+  remaining: number
+  pct: number
+  severity: 'watch' | 'high' | 'over'
+  action: AssistantAction
+}
+
+export interface AssistantReview {
+  period: string
+  currency: string
+  summary: {
+    income: number
+    spending: number
+    previous_spending: number
+    net_cash_flow: number
+    savings_rate: number | null
+  }
+  top_categories: { category: string; spent: number }[]
+  category_changes: { category: string; current: number; previous: number; change: number }[]
+  budget_risks: AssistantBudgetRisk[]
+  cleanup: { total: number; groups: AssistantCleanupGroup[] }
+  sections: {
+    title: string
+    body: string
+    severity: 'info' | 'good' | 'warning'
+    evidence: unknown[]
+    actions: AssistantAction[]
+  }[]
+  guardrail: string
 }

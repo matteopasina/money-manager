@@ -13,6 +13,7 @@ A self-hosted personal finance tracker for people with multiple accounts and cur
 - **Multi-currency** — native + base-currency amounts, manually maintained FX rates
 - **Import** — extensible adapter system (BBVA Excel, snapshot CSV; add your own)
 - **AI chat** — ask questions about your finances; works with any LiteLLM-compatible provider (Claude, GPT-4, Gemini…)
+- **MCP server** — read-only tools for assistants to query balances, transactions, budgets/schema, and summaries
 
 ## Stack
 
@@ -46,6 +47,24 @@ cd frontend && npm install && npm run dev
 ```
 
 Frontend dev server runs on port 5173 and proxies `/api` to port 8000.
+
+### MCP server
+
+Money Manager includes a local read-only MCP server for AI assistants:
+
+```bash
+source .venv/bin/activate
+python -m backend.mcp_server
+# or
+make mcp
+```
+
+Point your MCP client at that stdio command. Set `DB_PATH=/path/to/finances.db`
+if the database is not in the current working directory. The main app should
+create/migrate the database first; the MCP process only exposes read-oriented
+tools. The MCP surface includes curated finance tools plus a guarded `run_sql`
+tool that only accepts a single `SELECT`/`WITH` query, blocks `app_settings`,
+opens SQLite in read-only mode, and caps results at 200 rows.
 
 ## Configuration
 

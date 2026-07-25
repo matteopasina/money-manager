@@ -58,21 +58,24 @@ def _decrypt_secret(stored: str) -> str:
         # Key file lost/replaced — treat as unset rather than crash
         return ""
 
+# Colors match the frontend's warm "Meridian" palette (MoneyChart.tsx's
+# ACCOUNT_PALETTE / globals.css --series-1..5) so category dots and the
+# account/net-worth charts read as one system instead of clashing.
 DEFAULT_CATEGORIES = [
-    ("Groceries",     "#22c55e", False, False),
-    ("Food",          "#f97316", False, False),
-    ("Shopping",      "#a78bfa", False, False),
-    ("Transport",     "#06b6d4", False, False),
-    ("Bills",         "#64748b", False, False),
-    ("Housing",       "#8b5cf6", False, False),
-    ("Health",        "#ef4444", False, False),
-    ("Travel",        "#f59e0b", False, False),
-    ("Entertainment", "#ec4899", False, False),
-    ("Sport",         "#84cc16", False, False),
-    ("Investment",    "#3d8ef8", False, True),   # is_transfer
-    ("Income",        "#10d98e", True,  False),  # is_income
-    ("Transfer",      "#94a3b8", False, True),   # is_transfer
-    ("Other",         "#6b7280", False, False),
+    ("Groceries",     "#B8842B", False, False),
+    ("Food",          "#3F7A55", False, False),
+    ("Shopping",      "#6E5A3E", False, False),
+    ("Transport",     "#A88B5C", False, False),
+    ("Bills",         "#C97B4A", False, False),
+    ("Housing",       "#8C9A6B", False, False),
+    ("Health",        "#9A6B4A", False, False),
+    ("Travel",        "#7A8C6B", False, False),
+    ("Entertainment", "#B0915C", False, False),
+    ("Sport",         "#5C7A6E", False, False),
+    ("Investment",    "#D4A24C", False, True),   # is_transfer
+    ("Income",        "#4A6741", True,  False),  # is_income
+    ("Transfer",      "#8B6F47", False, True),   # is_transfer
+    ("Other",         "#B0745C", False, False),
 ]
 
 DEFAULT_SETTINGS = {
@@ -182,6 +185,36 @@ def _migrate(conn: sqlite3.Connection) -> None:
     def cols(table: str) -> set:
         return {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
 
+    def table_sql(table: str) -> str:
+        row = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?",
+            (table,),
+        ).fetchone()
+        return row[0] if row else ""
+
+    def rebuild_accounts_without_type_check() -> None:
+        conn.execute("PRAGMA foreign_keys = OFF")
+        conn.execute("""
+            CREATE TABLE accounts_new (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                name         TEXT    NOT NULL UNIQUE,
+                currency     TEXT    NOT NULL DEFAULT 'EUR',
+                account_type TEXT    NOT NULL DEFAULT 'other',
+                active       INTEGER NOT NULL DEFAULT 1
+            )
+        """)
+        account_cols = cols("accounts")
+        account_type_expr = "account_type" if "account_type" in account_cols else "'other'"
+        active_expr = "active" if "active" in account_cols else "1"
+        conn.execute(f"""
+            INSERT INTO accounts_new (id, name, currency, account_type, active)
+            SELECT id, name, currency, {account_type_expr}, {active_expr}
+            FROM accounts
+        """)
+        conn.execute("DROP TABLE accounts")
+        conn.execute("ALTER TABLE accounts_new RENAME TO accounts")
+        conn.execute("PRAGMA foreign_keys = ON")
+
     # categories: add color / is_income / is_transfer if missing
     cat_cols = cols("categories")
     if "color" not in cat_cols:
@@ -192,8 +225,16 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE categories ADD COLUMN is_transfer INTEGER NOT NULL DEFAULT 0")
 
     # accounts: rename 'type' → 'account_type' (old schema used 'type')
-    if "type" in cols("accounts") and "account_type" not in cols("accounts"):
+    account_cols = cols("accounts")
+    if "type" in account_cols and "account_type" not in account_cols:
         conn.execute("ALTER TABLE accounts RENAME COLUMN type TO account_type")
+        account_cols = cols("accounts")
+    if "account_type" not in account_cols:
+        conn.execute("ALTER TABLE accounts ADD COLUMN account_type TEXT NOT NULL DEFAULT 'other'")
+    if "active" not in account_cols:
+        conn.execute("ALTER TABLE accounts ADD COLUMN active INTEGER NOT NULL DEFAULT 1")
+    if "CHECK" in table_sql("accounts").upper() and "ACCOUNT_TYPE" in table_sql("accounts").upper():
+        rebuild_accounts_without_type_check()
 
     # transactions: rename 'movimento' → 'reference' (old BBVA import column name)
     tx_cols = cols("transactions")
@@ -463,9 +504,9 @@ def insert_transactions(rows: list[dict]) -> tuple[int, int]:
     return inserted, skipped
 
 
-def update_transaction_category(transaction_id: int, category: str) -> None:
+def update_transaction_category(transaction_id: int, category: str | None) -> None:
     with get_connection() as conn:
-        conn.execute("UPDATE transactions SET category = ? WHERE id = ?", (category, transaction_id))
+        conn.execute("UPDATE transactions SET category = ? WHERE id = ?", (category or None, transaction_id))
 
 
 def has_transactions() -> bool:
@@ -502,6 +543,19 @@ def upsert_category(cat: Category) -> Category:
 def delete_category(category_id: int) -> None:
     with get_connection() as conn:
         conn.execute("DELETE FROM categories WHERE id = ?", (category_id,))
+
+
+def reset_default_category_colors() -> int:
+    """Reset any existing category matching a DEFAULT_CATEGORIES name back to
+    its default color. On-demand only — never called automatically, so
+    existing user-chosen colors are never touched without asking."""
+    default_colors = {name: color for name, color, _, _ in DEFAULT_CATEGORIES}
+    updated = 0
+    with get_connection() as conn:
+        for name, color in default_colors.items():
+            cur = conn.execute("UPDATE categories SET color=? WHERE name=?", (color, name))
+            updated += cur.rowcount
+    return updated
 
 
 # ── Keyword rules ──────────────────────────────────────────────────────────────

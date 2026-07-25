@@ -3,8 +3,8 @@ import json
 
 
 def _run(query: str) -> dict:
-    from routers.chat import _tool_run_sql
-    return json.loads(_tool_run_sql({"query": query}))
+    import finance_tools
+    return json.loads(finance_tools.run_sql({"query": query}))
 
 
 def _seed(client):
@@ -74,8 +74,8 @@ def test_row_cap(client):
 
 
 def test_get_schema_excludes_secrets(client):
-    from routers.chat import _tool_get_schema
-    out = json.loads(_tool_get_schema({}))
+    import finance_tools
+    out = json.loads(finance_tools.get_schema({}))
     names = {t["name"] for t in out["tables"]}
     assert "transactions" in names and "budgets" in names
     assert "app_settings" not in names

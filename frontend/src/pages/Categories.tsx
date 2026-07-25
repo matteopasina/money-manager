@@ -1,18 +1,18 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { api, type Category, type CategoryIn, type KeywordRule, type KeywordRuleIn } from '../api/client'
 import LoadingSpinner from '../components/LoadingSpinner'
 import Alert from '../components/Alert'
+import { useApi } from '../hooks/useApi'
 
-const COLORS = ['#22c55e','#f97316','#a78bfa','#06b6d4','#64748b','#8b5cf6','#ef4444','#f59e0b','#ec4899','#84cc16','#3d8ef8','#10d98e','#94a3b8','#6b7280']
+// Matches the warm "Meridian" palette used throughout the app's charts
+// (MoneyChart.tsx's ACCOUNT_PALETTE) and the backend's DEFAULT_CATEGORIES.
+const COLORS = ['#B8842B','#3F7A55','#6E5A3E','#A88B5C','#C97B4A','#8C9A6B','#9A6B4A','#7A8C6B','#B0915C','#5C7A6E','#D4A24C','#4A6741','#8B6F47','#B0745C']
 const FIELDS = ['any', 'description', 'reference']
 
-const EMPTY_CAT: CategoryIn = { name: '', color: '#6b7280', is_income: false, is_transfer: false }
+const EMPTY_CAT: CategoryIn = { name: '', color: '#B0745C', is_income: false, is_transfer: false }
 const EMPTY_RULE: KeywordRuleIn = { keyword: '', category_name: '', match_field: 'any', priority: 0 }
 
 export default function Categories() {
-  const [categories, setCategories] = useState<Category[]>([])
-  const [rules, setRules]           = useState<KeywordRule[]>([])
-  const [loading, setLoading]       = useState(true)
   const [msg, setMsg]               = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   const [catForm, setCatForm]       = useState<CategoryIn>(EMPTY_CAT)
@@ -24,17 +24,17 @@ export default function Categories() {
   const [reapplying, setReapplying] = useState(false)
   const [seeding, setSeeding]       = useState(false)
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    const [c, r] = await Promise.all([api.categories.list(), api.categories.rules.list()])
-    setCategories(c)
-    setRules(r)
-    // Use functional update to only set the default category once (when form is still empty)
-    if (c.length) setRuleForm(f => f.category_name ? f : { ...f, category_name: c[0].name })
-    setLoading(false)
-  }, [])
+  const { data: loaded, loading, error, reload } = useApi(
+    () => Promise.all([api.categories.list(), api.categories.rules.list()]),
+    [],
+  )
+  const categories = useMemo(() => loaded?.[0] ?? [], [loaded])
+  const rules = loaded ? loaded[1] : []
 
-  useEffect(() => { load() }, [load])
+  // Default the new-rule form to the first category once, when categories load.
+  useEffect(() => {
+    if (categories.length) setRuleForm(f => f.category_name ? f : { ...f, category_name: categories[0].name })
+  }, [categories])
 
   function flash(type: 'success' | 'error', text: string) { setMsg({ type, text }) }
 
@@ -53,7 +53,7 @@ export default function Categories() {
       }
       setCatForm(EMPTY_CAT)
       setEditCat(null)
-      await load()
+      reload()
     } catch (e: unknown) { flash('error', e instanceof Error ? e.message : String(e)) }
     finally { setSaving(false) }
   }
@@ -63,7 +63,7 @@ export default function Categories() {
     try {
       await api.categories.delete(id)
       flash('success', 'Category deleted.')
-      await load()
+      reload()
     } catch (e: unknown) { flash('error', e instanceof Error ? e.message : String(e)) }
   }
 
@@ -87,7 +87,7 @@ export default function Categories() {
       }
       setRuleForm({ ...EMPTY_RULE, category_name: ruleForm.category_name })
       setEditRule(null)
-      await load()
+      reload()
     } catch (e: unknown) { flash('error', e instanceof Error ? e.message : String(e)) }
     finally { setSaving(false) }
   }
@@ -96,7 +96,7 @@ export default function Categories() {
     try {
       await api.categories.rules.delete(id)
       flash('success', 'Rule deleted.')
-      await load()
+      reload()
     } catch (e: unknown) { flash('error', e instanceof Error ? e.message : String(e)) }
   }
 
@@ -119,9 +119,18 @@ export default function Categories() {
     try {
       const res = await api.categories.rules.seedDefaults()
       flash('success', `Smart defaults added: ${res.inserted} new rules (${res.skipped} already existed).`)
-      await load()
+      reload()
     } catch (e: unknown) { flash('error', e instanceof Error ? e.message : String(e)) }
     finally { setSeeding(false) }
+  }
+
+  async function resetColors() {
+    if (!confirm('Reset built-in categories (Groceries, Food, Income, etc.) to the app\'s default colours? Custom categories are left alone.')) return
+    try {
+      const res = await api.categories.resetColors()
+      flash('success', `Reset ${res.updated} categor${res.updated === 1 ? 'y' : 'ies'} to the default palette.`)
+      reload()
+    } catch (e: unknown) { flash('error', e instanceof Error ? e.message : String(e)) }
   }
 
   if (loading) return <LoadingSpinner />
@@ -133,12 +142,16 @@ export default function Categories() {
         <p>Manage expense categories and keyword auto-classification rules</p>
       </div>
 
+      {error && <Alert type="error">Couldn't load categories: {error}</Alert>}
       {msg && <Alert type={msg.type} onClose={() => setMsg(null)}>{msg.text}</Alert>}
 
       {/* ── Category list + form ── */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '1.5rem', marginBottom: '2rem' }}>
         <div>
-          <div className="section-title">Categories</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+            <div className="section-title" style={{ margin: 0 }}>Categories</div>
+            <button className="btn btn-secondary btn-sm" onClick={resetColors}>Reset colours</button>
+          </div>
           <div className="table-wrap">
             <table>
               <thead>

@@ -2,51 +2,56 @@ import { useEffect, useState } from 'react'
 import { api, SECRET_MASK } from '../api/client'
 import LoadingSpinner from '../components/LoadingSpinner'
 import Alert from '../components/Alert'
-import { useTheme, type ThemeMode } from '../ThemeContext'
+import { useTheme } from '../useTheme'
+import type { ThemeMode } from '../theme'
 
 const MODEL_PRESETS = [
   {
     group: 'Anthropic Claude',
     models: [
-      { label: 'Claude Opus 4.6',       value: 'claude-opus-4-6' },
-      { label: 'Claude Sonnet 4.6',     value: 'claude-sonnet-4-6' },
+      { label: 'Claude Fable 5',        value: 'claude-fable-5' },
+      { label: 'Claude Opus 4.8',       value: 'claude-opus-4-8' },
+      { label: 'Claude Sonnet 5',       value: 'claude-sonnet-5' },
       { label: 'Claude Haiku 4.5',      value: 'claude-haiku-4-5-20251001' },
     ],
   },
   {
     group: 'Google Gemini',
     models: [
+      { label: 'Gemini 3.5 Flash',            value: 'gemini/gemini-3.5-flash' },
       { label: 'Gemini 3.1 Pro Preview',      value: 'gemini/gemini-3.1-pro-preview' },
-      { label: 'Gemini 3.1 Flash Lite Preview',value: 'gemini/gemini-3.1-flash-lite-preview' },
+      { label: 'Gemini 3.1 Flash-Lite',       value: 'gemini/gemini-3.1-flash-lite' },
+      { label: 'Gemini 3 Flash Preview',      value: 'gemini/gemini-3-flash-preview' },
       { label: 'Gemini 2.5 Pro',              value: 'gemini/gemini-2.5-pro' },
       { label: 'Gemini 2.5 Flash',            value: 'gemini/gemini-2.5-flash' },
-      { label: 'Gemini 2.5 Flash Lite',       value: 'gemini/gemini-2.5-flash-lite' },
     ],
   },
   {
     group: 'OpenAI',
     models: [
+      { label: 'GPT-5.5',       value: 'gpt-5.5' },
       { label: 'GPT-5.4',       value: 'gpt-5.4' },
-      { label: 'GPT-5.3',       value: 'gpt-5.3' },
-      { label: 'GPT-4.1',       value: 'gpt-4.1' },
-      { label: 'GPT-4.1 Mini',  value: 'gpt-4.1-mini' },
+      { label: 'GPT-5.4 Mini',  value: 'gpt-5.4-mini' },
+      { label: 'GPT-5.4 Nano',  value: 'gpt-5.4-nano' },
     ],
   },
   {
     group: 'Open Source (via Groq)',
     models: [
-      { label: 'Llama 4 Maverick',  value: 'groq/meta-llama/llama-4-maverick-17b-128e-instruct' },
-      { label: 'Llama 4 Scout',     value: 'groq/meta-llama/llama-4-scout-17b-16e-instruct' },
-      { label: 'Qwen QwQ 32B',      value: 'groq/qwen-qwq-32b' },
+      { label: 'GPT-OSS 120B',      value: 'groq/openai/gpt-oss-120b' },
+      { label: 'GPT-OSS 20B',       value: 'groq/openai/gpt-oss-20b' },
+      { label: 'Llama 3.3 70B',     value: 'groq/llama-3.3-70b-versatile' },
+      { label: 'Llama 3.1 8B',      value: 'groq/llama-3.1-8b-instant' },
+      { label: 'Qwen3 32B',         value: 'groq/qwen/qwen3-32b' },
     ],
   },
   {
     group: 'Open Source (via Ollama — local)',
     models: [
-      { label: 'Gemma 4 31B',       value: 'ollama/gemma4:31b' },
-      { label: 'Llama 4 Scout',     value: 'ollama/llama4:scout' },
+      { label: 'GPT-OSS 20B',       value: 'ollama/gpt-oss:20b' },
+      { label: 'Qwen3 32B',         value: 'ollama/qwen3:32b' },
+      { label: 'Llama 3.3 70B',     value: 'ollama/llama3.3:70b' },
       { label: 'DeepSeek R1 32B',   value: 'ollama/deepseek-r1:32b' },
-      { label: 'Qwen 3.5 14B',      value: 'ollama/qwen3.5:14b' },
     ],
   },
 ]
@@ -64,6 +69,8 @@ export default function Preferences() {
       setModel(s.llm_model || '')
       // Secrets come back masked; the input stays blank and typing replaces the stored key.
       setApiKeySaved(s.llm_api_key === SECRET_MASK)
+    }).catch((e: unknown) => {
+      setMsg({ type: 'error', text: `Couldn't load settings: ${e instanceof Error ? e.message : String(e)}` })
     }).finally(() => setLoading(false))
   }, [])
 
@@ -99,7 +106,7 @@ export default function Preferences() {
       <div className="page-header">
         <div>
           <h1>Preferences</h1>
-          <p>Appearance and AI assistant configuration</p>
+          <p>Appearance and financial helper configuration</p>
         </div>
       </div>
 
@@ -132,7 +139,7 @@ export default function Preferences() {
       </div>
 
       <div className="card" style={{ maxWidth: 560 }}>
-        <div className="section-title" style={{ marginBottom: '1rem' }}>AI Assistant</div>
+        <div className="section-title" style={{ marginBottom: '1rem' }}>Financial Helper</div>
 
         <div className="form-group">
           <label>Model presets</label>

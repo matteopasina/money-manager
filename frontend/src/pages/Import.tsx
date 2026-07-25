@@ -1,13 +1,13 @@
 import { useEffect, useState, useRef } from 'react'
-import { api, type Account, type AdapterInfo, type TransactionRow, type BalanceRow } from '../api/client'
+import { api, type Account, type AdapterInfo, type ImportPreviewTransactionRow, type ImportPreviewBalanceRow } from '../api/client'
 import LoadingSpinner from '../components/LoadingSpinner'
 import Alert from '../components/Alert'
-import { fmtAmount } from '../components/MoneyChart'
+import { fmtAmount } from '../utils/money'
 
 type PreviewData = {
   adapter: string
   imports: string
-  rows: TransactionRow[] | BalanceRow[]
+  rows: ImportPreviewTransactionRow[] | ImportPreviewBalanceRow[]
   count: number
 }
 
@@ -29,6 +29,9 @@ export default function Import() {
   useEffect(() => {
     Promise.all([api.accounts.list(true), api.import.adapters()])
       .then(([a, ad]) => { setAccounts(a); setAdapters(ad) })
+      .catch((e: unknown) => {
+        setMsg({ type: 'error', text: `Couldn't load accounts/adapters: ${e instanceof Error ? e.message : String(e)}` })
+      })
       .finally(() => setLoading(false))
   }, [])
 
@@ -43,7 +46,6 @@ export default function Import() {
       fd.append('account_id', accountId)
       fd.append('adapter_name', adapter)
       const res = await api.import.preview(fd)
-      if (res.error) throw new Error(res.error)
       setPreview({ adapter, imports: res.imports, rows: res.preview, count: res.total })
       setPage(0)
     } catch (e: unknown) {
@@ -62,7 +64,6 @@ export default function Import() {
       fd.append('account_id', accountId)
       fd.append('adapter_name', adapter)
       const res = await api.import.confirm(fd)
-      if (res.error) throw new Error(res.error)
       setMsg({ type: 'success', text: `Imported ${res.inserted} rows (${res.skipped} duplicates skipped).` })
       setPreview(null)
       setFile(null)
@@ -161,7 +162,7 @@ export default function Import() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(preview.rows as TransactionRow[]).slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((r, i) => (
+                  {(preview.rows as ImportPreviewTransactionRow[]).slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((r, i) => (
                     <tr key={i}>
                       <td style={{ whiteSpace: 'nowrap' }}>{r.date}</td>
                       <td>{r.description}</td>
@@ -179,16 +180,14 @@ export default function Import() {
                 <thead>
                   <tr>
                     <th>Date</th>
-                    <th>Account</th>
                     <th style={{ textAlign: 'right' }}>Amount (native)</th>
                     <th style={{ textAlign: 'right' }}>Amount (base)</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {(preview.rows as BalanceRow[]).slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((r, i) => (
+                  {(preview.rows as ImportPreviewBalanceRow[]).slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((r, i) => (
                     <tr key={i}>
                       <td style={{ whiteSpace: 'nowrap' }}>{r.date}</td>
-                      <td>{r.account}</td>
                       <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtAmount(r.amount_native)}</td>
                       <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtAmount(r.amount_base)}</td>
                     </tr>

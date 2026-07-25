@@ -1,9 +1,13 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { ArrowRight, Sparkles } from 'lucide-react'
 import { api, type ForecastResult, type AccountReturnsResult } from '../api/client'
-import MoneyChart, { RANGE_XAXIS, fmt } from '../components/MoneyChart'
+import MoneyChart, { RANGE_XAXIS } from '../components/MoneyChart'
+import { fmt } from '../utils/money'
 import LoadingSpinner from '../components/LoadingSpinner'
 import Alert from '../components/Alert'
 import { ACCOUNT_TYPE_BADGE } from '../constants'
+import { useApi } from '../hooks/useApi'
 
 function returnColor(pct: number): string {
   if (pct >= 5) return 'var(--accent-green)'
@@ -13,30 +17,28 @@ function returnColor(pct: number): string {
 }
 
 export default function Predictions() {
-  const [monthsAhead, setMonthsAhead]           = useState(12)
-  const [data, setData]                          = useState<ForecastResult | null>(null)
-  const [returns, setReturns]                    = useState<AccountReturnsResult | null>(null)
-  const [loading, setLoading]                    = useState(true)
-  const [error, setError]                        = useState<string | null>(null)
+  const navigate = useNavigate()
+  const [monthsAhead, setMonthsAhead] = useState(12)
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
+  // Debounced + race-safe: dragging the horizon slider fires this on every
+  // tick, but only the latest response after a ~250ms pause is applied.
+  // account-returns failure is non-fatal — the insights section just won't show.
+  const { data: result, loading, error } = useApi<[ForecastResult, AccountReturnsResult | null]>(
+    async () => {
       const [forecast, accountReturns] = await Promise.allSettled([
         api.analytics.forecast(monthsAhead),
         api.analytics.accountReturns(),
       ])
-      if (forecast.status === 'fulfilled') setData(forecast.value)
-      else setError(forecast.reason instanceof Error ? forecast.reason.message : String(forecast.reason))
-      if (accountReturns.status === 'fulfilled') setReturns(accountReturns.value)
-      // account-returns failure is non-fatal — insights section just won't show
-    } finally {
-      setLoading(false)
-    }
-  }, [monthsAhead])
-
-  useEffect(() => { load() }, [load])
+      if (forecast.status === 'rejected') {
+        throw forecast.reason instanceof Error ? forecast.reason : new Error(String(forecast.reason))
+      }
+      return [forecast.value, accountReturns.status === 'fulfilled' ? accountReturns.value : null]
+    },
+    [monthsAhead],
+    250,
+  )
+  const data = result ? result[0] : null
+  const returns = result ? result[1] : null
 
   const traces = data ? [
     {
@@ -58,9 +60,27 @@ export default function Predictions() {
     },
   ] : []
 
+  function askHelper(focus: string) {
+    if (!data) return
+    const current = data.historical.length ? data.historical[data.historical.length - 1].amount : null
+    const forecast = data.forecast.length ? data.forecast[data.forecast.length - 1].amount : null
+    const returnLine = returns
+      ? `\nPortfolio return: ${returns.weighted_annual_return_pct.toFixed(1)}%/yr cash-flow adjusted.`
+      : ''
+    const prompt = [
+      `Review my net worth forecast and focus on: ${focus}.`,
+      `Horizon: ${monthsAhead} months.`,
+      `Current net worth: ${current == null ? 'unknown' : fmt(current, data.currency)}.`,
+      `Forecast end value: ${forecast == null ? 'unknown' : fmt(forecast, data.currency)}.`,
+      `Estimated monthly growth: ${fmt(data.monthly_growth, data.currency)}.${returnLine}`,
+      'Explain the assumptions, what could make the forecast wrong, and the next best action.',
+    ].join('\n')
+    navigate('/financial-helper', { state: { prompt, sourcePath: '/projections' } })
+  }
+
   return (
     <div>
-      <div className="card" style={{ marginBottom: '18px', display: 'flex', alignItems: 'center', gap: '22px', padding: '18px 22px' }}>
+      <div className="card projection-control-card">
         <span style={{ fontSize: 13, color: 'var(--ink-muted)', fontWeight: 500, whiteSpace: 'nowrap' }}>Months to forecast</span>
         <input
           type="range" min={3} max={60} step={3}
@@ -111,7 +131,25 @@ export default function Predictions() {
             )}
           </div>
 
-          <div className="card" style={{ marginBottom: '18px' }}>
+          <div className="projection-ai-card">
+            <div>
+              <div className="projection-ai-title"><Sparkles size={16} /> Ask about this forecast</div>
+              <p>Send the current horizon, growth rate, portfolio return, and forecast value to the Financial Helper.</p>
+            </div>
+            <div className="projection-ai-actions">
+              <button className="btn btn-secondary btn-sm" onClick={() => askHelper('whether this forecast is realistic')}>
+                Reality check <ArrowRight size={13} />
+              </button>
+              <button className="btn btn-secondary btn-sm" onClick={() => askHelper('what would improve the forecast fastest')}>
+                Improve path <ArrowRight size={13} />
+              </button>
+              <button className="btn btn-secondary btn-sm" onClick={() => askHelper('the biggest risks in this projection')}>
+                Risks <ArrowRight size={13} />
+              </button>
+            </div>
+          </div>
+
+          <div className="card projection-chart-card" style={{ marginBottom: '18px' }}>
             <div className="section-title">Net Worth Forecast</div>
             <MoneyChart
               data={traces}

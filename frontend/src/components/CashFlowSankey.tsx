@@ -46,7 +46,24 @@ function ribbon(x0: number, y0t: number, y0b: number, x1: number, y1t: number, y
          ` L${x1},${y1b.toFixed(1)} C${mx},${y1b.toFixed(1)} ${mx},${y0b.toFixed(1)} ${x0},${y0b.toFixed(1)} Z`
 }
 
-export default function CashFlowSankey({ sources, targets, hubAmount }: Props) {
+// Nodes under 3% of the column's total collapse into a single "Other" node so
+// small categories don't stack into an unreadable overlap at the node's edge.
+function groupSmall(nodes: SankeyNode[]): SankeyNode[] {
+  const total = nodes.reduce((s, n) => s + n.val, 0)
+  if (total <= 0) return nodes
+  const kept: SankeyNode[] = []
+  let otherVal = 0
+  for (const n of nodes) {
+    if (n.val / total < 0.03) otherVal += n.val
+    else kept.push(n)
+  }
+  if (otherVal > 0) kept.push({ name: 'Other', val: otherVal, color: 'var(--ink-ghost)' })
+  return kept
+}
+
+export default function CashFlowSankey({ sources: rawSources, targets: rawTargets, hubAmount }: Props) {
+  const sources = groupSmall(rawSources)
+  const targets = groupSmall(rawTargets)
   const total = sources.reduce((s, a) => s + a.val, 0)
   if (total <= 0 || targets.length === 0) return null
 

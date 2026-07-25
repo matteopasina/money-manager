@@ -1,9 +1,16 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Predictions from './Predictions'
 import GoalCalculator from './GoalCalculator'
 
 export default function Projections() {
   const [tab, setTab] = useState<'forecast' | 'goal'>('forecast')
+
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      window.dispatchEvent(new Event('resize'))
+    }, 40)
+    return () => window.clearTimeout(id)
+  }, [tab])
 
   return (
     <div>

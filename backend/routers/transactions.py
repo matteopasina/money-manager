@@ -9,7 +9,7 @@ router = APIRouter(prefix="/api/transactions", tags=["transactions"])
 
 
 class CategoryUpdate(BaseModel):
-    category: str
+    category: str | None = None
 
 
 @router.get("")

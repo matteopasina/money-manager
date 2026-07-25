@@ -1,59 +1,39 @@
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { api, TOTAL_BUDGET } from '../api/client'
 import type { BudgetsStatus, BudgetRow, BudgetHistory, BudgetSuggestions, Category } from '../api/client'
-import MoneyChart, { fmt } from '../components/MoneyChart'
+import MoneyChart from '../components/MoneyChart'
+import { fmt } from '../utils/money'
 import LoadingSpinner from '../components/LoadingSpinner'
 import Alert from '../components/Alert'
-
-/** Shared progress color rule: over budget → loss, ≥75% → accent, else gain. */
-// eslint-disable-next-line react-refresh/only-export-components
-export function budgetBarColor(pct: number | null): string {
-  if (pct === null || pct > 100) return 'var(--loss)'
-  if (pct >= 75) return 'var(--accent)'
-  return 'var(--gain)'
-}
-
-// eslint-disable-next-line react-refresh/only-export-components
-export function budgetBarWidth(pct: number | null): string {
-  return `${Math.min(pct ?? 100, 100)}%`
-}
-
-/** Display label for a budget's category (the total budget has a reserved name). */
-// eslint-disable-next-line react-refresh/only-export-components
-export function budgetLabel(categoryName: string): string {
-  return categoryName === TOTAL_BUDGET ? 'All spending' : categoryName
-}
+import { budgetBarColor, budgetBarWidth, budgetLabel } from '../utils/budgetDisplay'
+import { formatMonthLabel } from '../utils/date'
+import { useApi } from '../hooks/useApi'
 
 const EMPTY_FORM = { category_name: '', monthly_amount: '', rollover: false }
 
 export default function Budgets() {
-  const [status, setStatus]         = useState<BudgetsStatus | null>(null)
-  const [categories, setCategories] = useState<Category[]>([])
-  const [suggestions, setSuggestions] = useState<BudgetSuggestions | null>(null)
-  const [history, setHistory]       = useState<BudgetHistory | null>(null)
   const [histMonths, setHistMonths] = useState(6)
   const [histBudget, setHistBudget] = useState<number | 'all'>('all')
-  const [loading, setLoading]       = useState(true)
   const [editing, setEditing]       = useState<BudgetRow | null>(null)
   const [form, setForm]             = useState(EMPTY_FORM)
   const [saving, setSaving]         = useState(false)
   const [msg, setMsg]               = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
-  const load = useCallback(async () => {
-    const [s, cats, sug, hist] = await Promise.all([
+  // suggest()/history() degrade gracefully (they're supplementary) — only a
+  // budgets.list()/categories.list() failure surfaces as a page-level error.
+  const { data: loaded, loading, error, reload } = useApi(
+    () => Promise.all([
       api.budgets.list(),
       api.categories.list(),
       api.budgets.suggest().catch(() => null),
       api.budgets.history(histMonths).catch(() => null),
-    ])
-    setStatus(s)
-    setCategories(cats)
-    setSuggestions(sug)
-    setHistory(hist)
-    setLoading(false)
-  }, [histMonths])
-
-  useEffect(() => { load() }, [load])
+    ]),
+    [histMonths],
+  )
+  const status: BudgetsStatus | null = loaded ? loaded[0] : null
+  const categories: Category[] = useMemo(() => loaded?.[1] ?? [], [loaded])
+  const suggestions: BudgetSuggestions | null = loaded ? loaded[2] : null
+  const history: BudgetHistory | null = loaded ? loaded[3] : null
 
   const budgetedNames = useMemo(() => new Set(status?.budgets.map(b => b.category_name) ?? []), [status])
   const selectableCategories = useMemo(
@@ -90,7 +70,7 @@ export default function Budgets() {
       else await api.budgets.create(body)
       setMsg({ type: 'success', text: editing ? 'Budget updated.' : 'Budget created.' })
       cancelEdit()
-      await load()
+      reload()
     } catch (e: unknown) {
       setMsg({ type: 'error', text: e instanceof Error ? e.message : String(e) })
     } finally {
@@ -103,7 +83,7 @@ export default function Budgets() {
     try {
       await api.budgets.delete(b.id)
       if (editing?.id === b.id) cancelEdit()
-      await load()
+      reload()
     } catch (e: unknown) {
       setMsg({ type: 'error', text: e instanceof Error ? e.message : String(e) })
     }
@@ -114,7 +94,7 @@ export default function Budgets() {
       await api.budgets.update(b.id, {
         category_name: b.category_name, monthly_amount: b.monthly_amount, rollover: b.rollover, active,
       })
-      await load()
+      reload()
     } catch (e: unknown) {
       setMsg({ type: 'error', text: e instanceof Error ? e.message : String(e) })
     }
@@ -143,12 +123,27 @@ export default function Budgets() {
     ]
   }, [history, histBudget])
 
-  if (loading || !status) return <LoadingSpinner />
+  if (loading) return <LoadingSpinner />
+
+  if (error || !status) return (
+    <div>
+      <div className="page-header"><h1>Budgets</h1></div>
+      <Alert type="error">Couldn't load budgets{error ? `: ${error}` : ''}.</Alert>
+    </div>
+  )
 
   const totalRow = status.total_budget   // active "All spending" cap, or null
   const active   = status.budgets.filter(b => b.active && b.category_name !== TOTAL_BUDGET)
   const inactive = status.budgets.filter(b => !b.active)
-  const monthLabel = new Date(status.month + '-01').toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
+  const monthLabel = formatMonthLabel(status.month, { withYear: true })
+
+  // totals.* deliberately exclude the "All spending" cap (it overlaps every
+  // category budget). When it's the only budget, the tiles must show it
+  // instead of a hardcoded zero.
+  const summary = active.length === 0 && totalRow
+    ? { budgeted: totalRow.monthly_amount, effective: totalRow.effective, spent: totalRow.spent, remaining: totalRow.remaining }
+    : status.totals
+  const summaryLabel = active.length === 0 && totalRow ? 'All spending' : active.length > 0 && totalRow ? 'Category budgets' : 'Budgeted'
 
   return (
     <div>
@@ -164,22 +159,22 @@ export default function Budgets() {
       {/* Summary cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 13, marginBottom: 18 }}>
         <div className="card">
-          <div className="metric-label">Budgeted · {monthLabel}</div>
-          <div className="metric-value" style={{ marginTop: 8 }}>{fmt(status.totals.effective, status.currency)}</div>
-          {Math.abs(status.totals.effective - status.totals.budgeted) >= 0.5 && (
+          <div className="metric-label">{summaryLabel} · {monthLabel}</div>
+          <div className="metric-value" style={{ marginTop: 8 }}>{fmt(summary.effective, status.currency)}</div>
+          {Math.abs(summary.effective - summary.budgeted) >= 0.5 && (
             <div style={{ fontSize: '11.5px', color: 'var(--ink-faint)', marginTop: 3 }}>
-              {fmt(status.totals.budgeted, status.currency)} base {status.totals.effective > status.totals.budgeted ? '+' : '−'} {fmt(Math.abs(status.totals.effective - status.totals.budgeted), status.currency)} carried
+              {fmt(summary.budgeted, status.currency)} base {summary.effective > summary.budgeted ? '+' : '−'} {fmt(Math.abs(summary.effective - summary.budgeted), status.currency)} carried
             </div>
           )}
         </div>
         <div className="card">
           <div className="metric-label">Spent</div>
-          <div className="metric-value" style={{ marginTop: 8 }}>{fmt(status.totals.spent, status.currency)}</div>
+          <div className="metric-value" style={{ marginTop: 8 }}>{fmt(summary.spent, status.currency)}</div>
         </div>
         <div className="card">
           <div className="metric-label">Remaining</div>
-          <div className="metric-value" style={{ marginTop: 8, color: status.totals.remaining >= 0 ? 'var(--gain)' : 'var(--loss)' }}>
-            {fmt(status.totals.remaining, status.currency)}
+          <div className="metric-value" style={{ marginTop: 8, color: summary.remaining >= 0 ? 'var(--gain)' : 'var(--loss)' }}>
+            {fmt(summary.remaining, status.currency)}
           </div>
         </div>
       </div>

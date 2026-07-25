@@ -61,3 +61,35 @@ class Budget:
     start_month: str = ""    # 'YYYY-MM', set server-side at creation; anchors rollover accrual
     active: bool = True
     id: int | None = None
+
+
+def base_amount(row) -> float:
+    """A transaction's amount in base currency, falling back to the native
+    amount when amount_base wasn't computed (e.g. rows predating FX support).
+
+    `row` is anything supporting `[]` lookup by column name — a pandas Series
+    (from db.get_transactions_df().iterrows()) or a sqlite3.Row.
+    """
+    import pandas as pd
+    value = row["amount_base"]
+    return float(row["amount"]) if value is None or pd.isna(value) else float(value)
+
+
+def spending_frame(df, categories):
+    """`df` narrowed to real spending: expense rows only, in base currency,
+    with transfer categories (account moves, brokerage trades) excluded.
+
+    `df` is a transactions DataFrame as returned by db.get_transactions_df()
+    (must have amount, amount_base, category columns). `categories` is the
+    list of Category rows from db.get_categories(), used to resolve which
+    category names are transfers. Returns a DataFrame with `amount_base`
+    coalesced onto `amount` and flipped positive; empty input passes through.
+    """
+    if df.empty:
+        return df
+    excluded = {c.name for c in categories if c.is_transfer}
+    out = df.copy()
+    out["amount_base"] = out["amount_base"].where(out["amount_base"].notna(), out["amount"])
+    out = out[(out["amount_base"] < 0) & (~out["category"].isin(excluded))]
+    out["amount_base"] = out["amount_base"].abs()
+    return out
