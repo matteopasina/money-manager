@@ -61,7 +61,7 @@ export default function Budgets() {
     e.preventDefault()
     const amount = parseFloat(form.monthly_amount)
     if (!form.category_name || isNaN(amount) || amount <= 0) {
-      return setMsg({ type: 'error', text: 'Pick a category and a positive monthly amount.' })
+      return setMsg({ type: 'error', text: 'Scegli una categoria e un importo mensile positivo.' })
     }
     setSaving(true)
     try {
@@ -79,7 +79,7 @@ export default function Budgets() {
   }
 
   async function remove(b: BudgetRow) {
-    if (!confirm(`Delete the ${budgetLabel(b.category_name)} budget?`)) return
+    if (!confirm(`Eliminare il budget ${budgetLabel(b.category_name)}?`)) return
     try {
       await api.budgets.delete(b.id)
       if (editing?.id === b.id) cancelEdit()
@@ -127,8 +127,8 @@ export default function Budgets() {
 
   if (error || !status) return (
     <div>
-      <div className="page-header"><h1>Budgets</h1></div>
-      <Alert type="error">Couldn't load budgets{error ? `: ${error}` : ''}.</Alert>
+      <div className="page-header"><h1>Budget</h1></div>
+      <Alert type="error">Impossibile caricare i budget{error ? `: ${error}` : ''}.</Alert>
     </div>
   )
 
@@ -149,41 +149,41 @@ export default function Budgets() {
     <div>
       <div className="page-header">
         <div>
-          <h1>Budgets</h1>
-          <p>Monthly spending limits per category · amounts in base currency ({status.currency})</p>
+          <h1>Budget</h1>
+          <p>Limiti mensili per categoria · importi in valuta di riferimento ({status.currency})</p>
         </div>
       </div>
 
       {msg && <Alert type={msg.type} onClose={() => setMsg(null)}>{msg.text}</Alert>}
 
       {/* Summary cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 13, marginBottom: 18 }}>
+      <div className="budget-summary">
         <div className="card">
           <div className="metric-label">{summaryLabel} · {monthLabel}</div>
           <div className="metric-value" style={{ marginTop: 8 }}>{fmt(summary.effective, status.currency)}</div>
           {Math.abs(summary.effective - summary.budgeted) >= 0.5 && (
             <div style={{ fontSize: '11.5px', color: 'var(--ink-faint)', marginTop: 3 }}>
-              {fmt(summary.budgeted, status.currency)} base {summary.effective > summary.budgeted ? '+' : '−'} {fmt(Math.abs(summary.effective - summary.budgeted), status.currency)} carried
+              {fmt(summary.budgeted, status.currency)} base {summary.effective > summary.budgeted ? '+' : '−'} {fmt(Math.abs(summary.effective - summary.budgeted), status.currency)} riportato
             </div>
           )}
         </div>
         <div className="card">
-          <div className="metric-label">Spent</div>
+          <div className="metric-label">Speso</div>
           <div className="metric-value" style={{ marginTop: 8 }}>{fmt(summary.spent, status.currency)}</div>
         </div>
         <div className="card">
-          <div className="metric-label">Remaining</div>
+          <div className="metric-label">Residuo</div>
           <div className="metric-value" style={{ marginTop: 8, color: summary.remaining >= 0 ? 'var(--gain)' : 'var(--loss)' }}>
             {fmt(summary.remaining, status.currency)}
           </div>
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 18, alignItems: 'start', marginBottom: 18 }}>
+      <div className="budget-workspace">
         {/* Budget rows */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {status.budgets.length === 0 && (
-            <Alert type="info">No budgets yet. Pick a category and a monthly limit to start.</Alert>
+            <Alert type="info">Scegli una categoria e un limite mensile per creare il primo budget.</Alert>
           )}
           {totalRow && (
             <div style={{ marginBottom: 4 }}>
@@ -199,7 +199,7 @@ export default function Budgets() {
           ))}
           {inactive.length > 0 && (
             <>
-              <div className="metric-label" style={{ marginTop: 8 }}>Inactive</div>
+              <div className="metric-label" style={{ marginTop: 8 }}>Inattivi</div>
               {inactive.map(b => (
                 <div key={b.id} style={{ opacity: 0.55 }}>
                   <BudgetCard b={b} currency={status.currency}
@@ -214,28 +214,28 @@ export default function Budgets() {
         {/* Create / edit form */}
         <div className="card" style={{ alignSelf: 'start' }}>
           <div className="section-title" style={{ fontSize: 16, marginBottom: '1rem' }}>
-            {editing ? `Edit ${budgetLabel(editing.category_name)} budget` : 'New budget'}
+            {editing ? `Modifica budget ${budgetLabel(editing.category_name)}` : 'Nuovo budget'}
           </div>
           <form onSubmit={save}>
             <div className="form-group">
-              <label>Category</label>
+              <label>Categoria</label>
               <select
                 value={form.category_name}
                 onChange={e => setForm(f => ({ ...f, category_name: e.target.value }))}
                 disabled={!!editing}
                 required
               >
-                <option value="">Select category…</option>
+                <option value="">Seleziona categoria…</option>
                 {(!budgetedNames.has(TOTAL_BUDGET) || editing?.category_name === TOTAL_BUDGET) && (
-                  <option value={TOTAL_BUDGET}>All spending (total cap)</option>
+                  <option value={TOTAL_BUDGET}>Tutte le spese (limite complessivo)</option>
                 )}
                 {selectableCategories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
               </select>
             </div>
             <div className="form-group">
-              <label>Monthly amount ({status.currency})</label>
+              <label>Importo mensile ({status.currency})</label>
               <input
-                type="number" step="1" min="1" placeholder="e.g. 300"
+                type="number" step="1" min="1" placeholder="Es. 300"
                 value={form.monthly_amount}
                 onChange={e => setForm(f => ({ ...f, monthly_amount: e.target.value }))}
                 required
@@ -246,7 +246,7 @@ export default function Budgets() {
                   style={{ fontSize: '0.75rem', marginTop: 4 }}
                   onClick={() => setForm(f => ({ ...f, monthly_amount: String(Math.ceil(suggestionFor(f.category_name)!.avg_monthly_spend)) }))}
                 >
-                  Avg last 6 months: {fmt(suggestionFor(form.category_name)!.avg_monthly_spend, status.currency)} · {suggestionFor(form.category_name)!.months_with_data} mo of data — use it
+                  Media ultimi 6 mesi: {fmt(suggestionFor(form.category_name)!.avg_monthly_spend, status.currency)} · {suggestionFor(form.category_name)!.months_with_data} mesi di dati — usa questo importo
                 </button>
               )}
             </div>
@@ -258,17 +258,17 @@ export default function Budgets() {
                   onChange={e => setForm(f => ({ ...f, rollover: e.target.checked }))}
                   style={{ width: 'auto' }}
                 />
-                Roll over unused budget
+                Riporta il residuo
               </label>
               <p style={{ fontSize: '0.75rem', color: 'var(--ink-faint)', marginTop: 4 }}>
-                Unused (or overspent) budget carries into the next month{editing ? `, accumulating since ${editing.start_month}` : ', starting this month'}.
+                Il residuo positivo o negativo viene riportato al mese successivo{editing ? `, accumulato da ${editing.start_month}` : ', a partire da questo mese'}.
               </p>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <button className="btn btn-primary" type="submit" disabled={saving}>
-                {saving ? 'Saving…' : editing ? 'Update' : 'Create budget'}
+                {saving ? 'Salvataggio…' : editing ? 'Aggiorna' : 'Crea budget'}
               </button>
-              {editing && <button type="button" className="btn btn-secondary" onClick={cancelEdit}>Cancel</button>}
+              {editing && <button type="button" className="btn btn-secondary" onClick={cancelEdit}>Annulla</button>}
             </div>
           </form>
         </div>
@@ -278,10 +278,10 @@ export default function Budgets() {
       {history && history.series.length > 0 && (
         <div className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, flexWrap: 'wrap', gap: 10 }}>
-            <div className="section-title" style={{ marginBottom: 0 }}>Budget vs. spent</div>
+            <div className="section-title" style={{ marginBottom: 0 }}>Budget e spese</div>
             <div style={{ display: 'flex', gap: 8 }}>
               <select value={histBudget} onChange={e => setHistBudget(e.target.value === 'all' ? 'all' : Number(e.target.value))} style={{ width: 'auto' }}>
-                <option value="all">All budgets</option>
+                <option value="all">Tutti i budget</option>
                 {history.series.map(s => <option key={s.id} value={s.id}>{budgetLabel(s.category_name)}</option>)}
               </select>
               <select value={histMonths} onChange={e => setHistMonths(Number(e.target.value))} style={{ width: 'auto' }}>
@@ -318,18 +318,18 @@ function BudgetCard({ b, currency, onEdit, onDelete, onReactivate, onDeactivate,
         {!isTotal && <span style={{ width: 10, height: 10, borderRadius: 3, background: b.category_color ?? 'var(--ink-ghost)', flexShrink: 0 }} />}
         <span style={{ fontWeight: 600, color: 'var(--ink)' }}>{budgetLabel(b.category_name)}</span>
         {b.rollover && (
-          <span className="badge" style={{ background: 'var(--bg-chip)', color: 'var(--ink-muted)' }}>↻ Rollover</span>
+          <span className="badge" style={{ background: 'var(--bg-chip)', color: 'var(--ink-muted)' }}>↻ Riporto</span>
         )}
         {Math.abs(b.carry) >= 0.5 && (
           <span className="badge" style={{
             background: b.carry >= 0 ? 'rgba(63,122,85,0.14)' : 'rgba(190,74,51,0.12)',
             color: b.carry >= 0 ? 'var(--gain)' : 'var(--loss)',
           }}>
-            {b.carry >= 0 ? '+' : '−'}{fmt(Math.abs(b.carry), currency)} carried
+            {b.carry >= 0 ? '+' : '−'}{fmt(Math.abs(b.carry), currency)} riportato
           </span>
         )}
         {b.orphaned && (
-          <span className="badge" style={{ background: 'rgba(190,74,51,0.12)', color: 'var(--loss)' }}>Category missing</span>
+          <span className="badge" style={{ background: 'rgba(190,74,51,0.12)', color: 'var(--loss)' }}>Categoria mancante</span>
         )}
         <span style={{ marginLeft: 'auto', fontSize: '13px', color: 'var(--ink-soft)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
           {fmt(b.spent, currency)} / {fmt(b.effective, currency)}
@@ -342,10 +342,10 @@ function BudgetCard({ b, currency, onEdit, onDelete, onReactivate, onDeactivate,
         <div className="progress-fill" style={{ width: budgetBarWidth(b.pct), background: budgetBarColor(b.pct) }} />
       </div>
       <div style={{ display: 'flex', gap: 4, marginTop: 10, justifyContent: 'flex-end' }}>
-        {onReactivate && <button className="btn btn-secondary btn-sm" onClick={onReactivate}>Reactivate</button>}
-        {onDeactivate && <button className="btn btn-secondary btn-sm" onClick={onDeactivate}>Deactivate</button>}
-        <button className="btn btn-secondary btn-sm" onClick={onEdit}>Edit</button>
-        <button className="btn btn-danger btn-sm" onClick={onDelete}>Delete</button>
+        {onReactivate && <button className="btn btn-secondary btn-sm" onClick={onReactivate}>Riattiva</button>}
+        {onDeactivate && <button className="btn btn-secondary btn-sm" onClick={onDeactivate}>Disattiva</button>}
+        <button className="btn btn-secondary btn-sm" onClick={onEdit}>Modifica</button>
+        <button className="btn btn-danger btn-sm" onClick={onDelete}>Elimina</button>
       </div>
     </div>
   )

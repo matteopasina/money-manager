@@ -93,4 +93,14 @@ Configured via app settings (`llm_model`, `llm_api_key`). Uses LiteLLM so any pr
 - Non-base-currency accounts store both native amount and base-currency equivalent; FX rates are manually maintained in `fx_rates`
 - FX rates must be `> 0` — the API enforces this with a Pydantic validator
 - `withdrawal_rate_pct` in the FIRE calculator must be `> 0` — validated at the API layer
-- Credential settings (`db.SECRET_SETTINGS`: EB private key, Binance secret, IB token, LLM key) are encrypted at rest (Fernet key in `finances.db.key`, 0600) and masked as `__secret__` by `GET /api/settings` — they are write-only from the browser. When adding a new credential setting, add it to `SECRET_SETTINGS` and follow the write-only pattern in Connections.tsx
+- Credential settings (`db.SECRET_SETTINGS`: EB private key, Binance secret, IB token, LLM key) are encrypted at rest (Fernet key in `finances.db.key`, 0600) and masked as `__secret__` by `GET /api/settings` — they are write-only from the browser. When adding a new credential setting, add it to `SECRET_SETTINGS` and follow the write-only pattern in `frontend/src/pages/connections/SecretField.tsx` (used by the IB/Binance cards; Revolut/BBVA's Enable Banking private key is a multi-line textarea with the same write-only masking, inlined in `RevolutCard.tsx`/`BbvaCard.tsx`)
+
+## Git hooks
+
+A pre-commit hook scans staged changes for secrets with [gitleaks](https://github.com/gitleaks/gitleaks) (`brew install gitleaks`) before every commit. It's opt-in per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+The commit and push hooks block publication if `gitleaks` is missing or finds secrets. The commit hook also rejects databases, credentials and local audit evidence. To scan the full history by hand: `gitleaks git --no-banner --redact .`. Never commit personal financial records, even inside tests, screenshots or documentation; use synthetic fixtures and review staged content before every push.

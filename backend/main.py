@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 import database as db
 import scheduler
 from routers import accounts, balances, budgets, transactions, categories, import_, settings, analytics, chat, assistant, ib, binance, bbva, revolut, sync
+from routers import stock_positions
 
 app = FastAPI(title="Money Manager API")
 
@@ -40,6 +41,7 @@ app.include_router(bbva.router)
 app.include_router(revolut.router)
 app.include_router(sync.router)
 app.include_router(budgets.router)
+app.include_router(stock_positions.router)
 
 # Initialise DB on startup
 @app.on_event("startup")

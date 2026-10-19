@@ -1,161 +1,39 @@
-import { useEffect, useState, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { api, type AssistantInsight } from '../api/client'
+import { type CSSProperties, type ReactNode } from 'react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import LoadingSpinner from '../components/LoadingSpinner'
 import Alert from '../components/Alert'
-import { useApi } from '../hooks/useApi'
-import { useTheme } from '../useTheme'
-import {
-  computeMetrics, computeNetWorthSeries, buildAccountTraces, buildSparkline, buildSankeyData, greeting,
-} from './dashboard/data'
-import HeroCard from './dashboard/HeroCard'
-import InsightsCard from './dashboard/InsightsCard'
-import NetWorthChartCard from './dashboard/NetWorthChartCard'
-import AllocationCard from './dashboard/AllocationCard'
-import CashFlowCard from './dashboard/CashFlowCard'
-import BudgetsWidget from './dashboard/BudgetsWidget'
-import AccountsOverTime from './dashboard/AccountsOverTime'
+import { formatDateLabel, parseLocalDate } from '../utils/date'
 import RecentTransactions from './dashboard/RecentTransactions'
+import useHomeData from './home/useHomeData'
+import useHomeExtras from './home/useHomeExtras'
+import { homeSections, type HomeSectionId } from './home/layout'
+import PortfolioCard from './home/PortfolioCard'
+import MonthCard from './home/MonthCard'
+import FlowCard from './home/FlowCard'
+import AttentionCard from './home/AttentionCard'
+import AskCard from './home/AskCard'
 
 export default function Dashboard() {
-  const [insights, setInsights]         = useState<AssistantInsight[]>([])
-  const [insightsLoading, setInsightsLoading] = useState(true)
   const navigate = useNavigate()
-
-  function askHelper(prompt: string) {
-    navigate('/financial-helper', { state: { prompt } })
+  const [searchParams, setSearchParams] = useSearchParams()
+  const model = useHomeData(searchParams.get('month') ?? undefined)
+  function setMonth(month: string) { setSearchParams(previous => { const next = new URLSearchParams(previous); next.set('month', month); return next }) }
+  const extras = useHomeExtras()
+  if (model.loading) return <LoadingSpinner />
+  if (model.error) return <div><h1>Il tuo quadro</h1><Alert type="error">Impossibile caricare il quadro: {model.error}</Alert><button className="btn btn-primary" onClick={model.reload}>Riprova</button></div>
+  const current = model.month === model.currentMonth
+  const totalBudget = current && extras.budgets.data?.month === model.month && extras.budgets.data.total_budget?.active && !extras.budgets.data.total_budget.orphaned ? extras.budgets.data.total_budget : null
+  const cards: Record<HomeSectionId, ReactNode> = {
+    portfolio: <PortfolioCard metrics={model.metrics} series={model.series} currency={model.currency} />,
+    month: <MonthCard asOf={model.today} summary={model.summary} forecast={model.forecast} months={model.months} current={current} currency={model.currency} budget={totalBudget} onMonthChange={setMonth} />,
+    flow: <FlowCard asOf={model.today} summary={model.summary} currency={model.currency} />,
+    attention: <AttentionCard asOf={model.today} uncategorizedCount={model.uncategorizedCount} summary={model.summary} budgets={extras.budgets.data} sync={extras.sync.data} budgetError={extras.budgets.error} syncError={extras.sync.error} loading={extras.budgets.loading || extras.sync.loading} current={current && extras.budgets.data?.month === model.month} />,
+    recent: <RecentTransactions transactions={model.recent} baseCurrency={model.currency} />,
+    assistant: <AskCard period={model.month} onAsk={prompt => navigate('/financial-helper', { state: { prompt, sourcePath: `/dashboard?month=${model.month}` } })} />,
   }
-
-  const { data: loaded, loading, error } = useApi(
-    () => Promise.all([
-      api.balances.list(),
-      api.transactions.list(),
-      api.categories.list(),
-      api.budgets.list().catch(() => null),
-      api.settings.all(),
-    ]),
-    [],
-  )
-  const balances = useMemo(() => loaded?.[0] ?? [], [loaded])
-  const transactions = useMemo(() => loaded?.[1] ?? [], [loaded])
-  const categories = useMemo(() => loaded?.[2] ?? [], [loaded])
-  const budgets = loaded ? loaded[3] : null
-  const baseCurrency = loaded ? (loaded[4].base_currency ?? 'EUR') : 'EUR'
-
-  useEffect(() => {
-    api.assistant.insights()
-      .then(res => setInsights(res.insights))
-      .catch(() => setInsights([]))
-      .finally(() => setInsightsLoading(false))
-  }, [])
-
-  const metrics       = useMemo(() => computeMetrics(balances), [balances])
-  const nwSeries      = useMemo(() => computeNetWorthSeries(balances), [balances])
-  const accountTraces = useMemo(() => buildAccountTraces(balances), [balances])
-  const spark    = useMemo(() => buildSparkline(nwSeries.y), [nwSeries])
-  const sankey   = useMemo(() => buildSankeyData(transactions, categories), [transactions, categories])
-
-  const delta    = metrics.totalNow - metrics.totalPrev
-  const pct      = metrics.totalPrev ? (delta / metrics.totalPrev) * 100 : 0
-  const invested = metrics.totalNow - metrics.liquid
-  const liquidPct = metrics.totalNow ? Math.round((metrics.liquid / metrics.totalNow) * 100) : 0
-
-  // Net-worth growth since 1 Jan
-  const ytdPct = useMemo(() => {
-    const jan1 = `${new Date().getFullYear()}-01-01`
-    const idx = nwSeries.x.findIndex(d => d >= jan1)
-    if (idx < 0 || idx >= nwSeries.y.length - 1 || nwSeries.y[idx] <= 0) return null
-    return ((nwSeries.y[nwSeries.y.length - 1] - nwSeries.y[idx]) / nwSeries.y[idx]) * 100
-  }, [nwSeries])
-
-  const { isDark } = useTheme()
-  const inkColor = isDark ? '#F4EEE2' : '#241F18'
-
-  const nwTrace = {
-    x: nwSeries.x,
-    y: nwSeries.y,
-    type: 'scatter' as const,
-    mode: 'lines+markers' as const,
-    name: 'Net Worth',
-    line: { color: '#B8842B', width: 2.5, shape: 'spline' as const },
-    marker: { color: '#F6F1E7', size: 6, line: { color: '#B8842B', width: 1.8 } },
-    fill: 'tozeroy' as const,
-    fillcolor: 'rgba(184,132,43,0.16)',
-  }
-
-  const allocTrace = [{
-    labels: metrics.byType.map(g => g.type),
-    values: metrics.byType.map(g => g.now),
-    type: 'pie' as const,
-    hole: 0.66,
-    sort: false,
-    direction: 'clockwise' as const,
-    marker: { colors: metrics.byType.map(g => g.color), line: { color: isDark ? '#242019' : '#F6F1E7', width: 2 } },
-    textinfo: 'none' as const,
-    hovertemplate: '%{label}: %{value:,.0f}<extra></extra>',
-  }]
-
-  if (loading) return <LoadingSpinner />
-
-  if (error) return (
-    <div>
-      <div className="page-header"><h1>Dashboard</h1></div>
-      <Alert type="error">Couldn't load your dashboard data: {error}</Alert>
-    </div>
-  )
-
-  if (!balances.length) return (
-    <div>
-      <div className="page-header"><h1>Dashboard</h1></div>
-      <Alert type="info">No balance data yet. Go to <strong>Accounts &amp; FX</strong> to add accounts, then record balance snapshots or import data.</Alert>
-    </div>
-  )
-
-  const recentTx = transactions.slice(0, 6)
-
-  // Top per-category budgets by usage for the widget (pct null = over → first).
-  // The "All spending" total cap is shown as the widget's headline, not a row.
-  const totalBudget = budgets?.total_budget ?? null
-  const widgetRows = (budgets?.budgets ?? [])
-    .filter(b => b.active && !b.orphaned && b.category_name !== '__total__')
-    .sort((a, b) => (b.pct ?? 999) - (a.pct ?? 999))
-    .slice(0, 5)
-
-  return (
-    <div>
-      <div className="page-header">
-        <div>
-          <h1>{greeting()}</h1>
-          <p>{new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
-        </div>
-        <button className="btn btn-primary" onClick={() => navigate('/balances')}>+ Add balance</button>
-      </div>
-
-      <HeroCard metrics={metrics} baseCurrency={baseCurrency} spark={spark} delta={delta} pct={pct} invested={invested} liquidPct={liquidPct} />
-
-      <InsightsCard insights={insights} loading={insightsLoading} onAskHelper={askHelper} />
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: '18px', marginBottom: '18px' }}>
-        <NetWorthChartCard nwTrace={nwTrace} ytdPct={ytdPct} />
-        <AllocationCard metrics={metrics} allocTrace={allocTrace} inkColor={inkColor} />
-      </div>
-
-      {(sankey || widgetRows.length > 0 || totalBudget) && (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: sankey && (widgetRows.length > 0 || totalBudget) ? '1.6fr 1fr' : '1fr',
-          gap: '18px', marginBottom: '18px', alignItems: 'start',
-        }}>
-          {sankey && <CashFlowCard sankey={sankey} />}
-          {(widgetRows.length > 0 || totalBudget) && budgets && (
-            <BudgetsWidget budgets={budgets} totalBudget={totalBudget} widgetRows={widgetRows} />
-          )}
-        </div>
-      )}
-
-      <AccountsOverTime accountTraces={accountTraces} />
-
-      <RecentTransactions transactions={recentTx} baseCurrency={baseCurrency} />
-    </div>
-  )
+  return <div className="dashboard home-page">
+    <header className="home-header"><div><p className="home-date">{parseLocalDate(model.today).toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p><h1>I tuoi soldi, il tuo spazio.</h1></div><Link className="btn btn-secondary" to="/projections/goals">Esplora il tuo futuro ↗</Link></header>
+    <div className="home-grid">{homeSections.map(section => <div key={section.id} className={`home-slot home-slot-${section.width}`} data-section={section.id} style={{ '--mobile-order': section.mobileOrder } as CSSProperties}>{cards[section.id]}</div>)}</div>
+    <p className="home-data-note">{model.summary.latestTransaction ? `Ultimo movimento registrato: ${formatDateLabel(model.summary.latestTransaction, { withYear: true })}.` : 'Nessun movimento importato.'} I dati riflettono i movimenti importati; i mesi potrebbero essere incompleti. <Link to="/settings/connections">Gestisci connessioni →</Link></p>
+  </div>
 }

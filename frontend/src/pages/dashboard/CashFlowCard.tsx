@@ -1,32 +1,31 @@
-import CashFlowSankey from '../../components/CashFlowSankey'
+import { Link } from 'react-router-dom'
+import { fmt } from '../../utils/money'
 import { formatMonthLabel } from '../../utils/date'
-import type { SankeyData } from './data'
+import type { MonthSummary } from './data'
 
-interface Props {
-  sankey: SankeyData
-}
-
-export default function CashFlowCard({ sankey }: Props) {
+export default function CashFlowCard({ summary, currency }: { summary: MonthSummary; currency: string }) {
+  const top = summary.categories.slice(0, 5)
+  const remainder = summary.categories.slice(5).reduce((sum, c) => sum + c.amount, 0)
+  const rows = remainder ? [...top, { name: 'Other categories', amount: remainder, color: 'var(--ink-muted)' }] : top
   return (
-    <div className="card">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
-        <div className="section-title" style={{ marginBottom: 0 }}>
-          {sankey.isCurrentMonth
-            ? 'Cash flow this month'
-            : `Cash flow — ${formatMonthLabel(sankey.month, { withYear: true })}`}
+    <section className="card spending-card" aria-labelledby="spending-heading">
+      <div className="dashboard-section-header">
+        <div>
+          <h2 id="spending-heading">Where your money went</h2>
+          <p>{formatMonthLabel(summary.month, { withYear: true })} · {summary.categories.length} spending categories</p>
         </div>
-        <div style={{ display: 'flex', gap: 16, fontSize: '11.5px', color: 'var(--ink-muted)' }}>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 9, height: 9, borderRadius: 3, background: '#3F7A55' }} />Income</span>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 9, height: 9, borderRadius: 3, background: '#6E5A3E' }} />Spending</span>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 9, height: 9, borderRadius: 3, background: '#4A5C8A' }} />Left over</span>
-        </div>
+        <Link className="btn-link" to="/transactions">View transactions →</Link>
       </div>
-      <CashFlowSankey
-        sources={sankey.sources}
-        targets={sankey.targets}
-        hubAmount={'€' + Math.round(sankey.income).toLocaleString('en-US')}
-      />
-      <div style={{ fontSize: '11.5px', color: 'var(--ink-faint)', marginTop: 8 }}>{sankey.caption}</div>
-    </div>
+      {rows.length ? <ul className="spending-list">
+        {rows.map(row => <li key={row.name}>
+          <div className="spending-label"><span>{row.name}</span><strong>{fmt(row.amount, currency)} <small>{(row.amount / summary.spending * 100).toFixed(0)}%</small></strong></div>
+          <div className="spending-track" aria-hidden="true"><div style={{ width: `${row.amount / summary.spending * 100}%`, background: row.color }} /></div>
+        </li>)}
+      </ul> : <div className="dashboard-empty"><p>No spending recorded for this month.</p><Link className="btn btn-secondary" to="/import">Import transactions</Link></div>}
+      {summary.uncategorizedCount > 0 && <div className="dashboard-note">
+        {fmt(summary.uncategorizedSpend, currency)} in {summary.uncategorizedCount} uncategorized expenses.
+        {' '}<Link to="/transactions?uncategorized=1">Review categories →</Link>
+      </div>}
+    </section>
   )
 }

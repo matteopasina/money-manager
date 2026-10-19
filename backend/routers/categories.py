@@ -1,5 +1,7 @@
-from fastapi import APIRouter
-from pydantic import BaseModel
+import sqlite3
+from typing import Annotated, Literal
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, StringConstraints
 import database as db
 from categoriser import recategorise_all
 from domain import Category, KeywordRule
@@ -8,16 +10,16 @@ router = APIRouter(prefix="/api/categories", tags=["categories"])
 
 
 class CategoryIn(BaseModel):
-    name: str
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
     color: str = "#6b7280"
     is_income: bool = False
     is_transfer: bool = False
 
 
 class KeywordRuleIn(BaseModel):
-    keyword: str
+    keyword: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
     category_name: str
-    match_field: str = "any"
+    match_field: Literal["description", "reference", "any"] = "any"
     priority: int = 0
 
 
@@ -40,15 +42,23 @@ def list_categories():
 
 @router.post("", status_code=201)
 def create_category(body: CategoryIn):
-    cat = db.upsert_category(Category(id=None, name=body.name, color=body.color,
-                                      is_income=body.is_income, is_transfer=body.is_transfer))
+    try:
+        cat = db.upsert_category(Category(id=None, name=body.name, color=body.color,
+                                          is_income=body.is_income, is_transfer=body.is_transfer))
+    except sqlite3.IntegrityError:
+        raise HTTPException(409, "A category with this name already exists")
     return _cat_out(cat)
 
 
 @router.put("/{category_id}")
 def update_category(category_id: int, body: CategoryIn):
-    db.upsert_category(Category(id=category_id, name=body.name, color=body.color,
-                                is_income=body.is_income, is_transfer=body.is_transfer))
+    try:
+        db.upsert_category(Category(id=category_id, name=body.name, color=body.color,
+                                    is_income=body.is_income, is_transfer=body.is_transfer))
+    except ValueError:
+        raise HTTPException(404, "Category not found")
+    except sqlite3.IntegrityError:
+        raise HTTPException(409, "A category with this name already exists")
     return {"ok": True}
 
 
@@ -73,6 +83,8 @@ def list_rules():
 
 @router.post("/rules", status_code=201)
 def create_rule(body: KeywordRuleIn):
+    if body.category_name not in {c.name for c in db.get_categories()}:
+        raise HTTPException(400, "Rule category not found")
     rule = db.upsert_keyword_rule(KeywordRule(id=None, keyword=body.keyword,
                                               category_name=body.category_name,
                                               match_field=body.match_field,
@@ -82,6 +94,8 @@ def create_rule(body: KeywordRuleIn):
 
 @router.put("/rules/{rule_id}")
 def update_rule(rule_id: int, body: KeywordRuleIn):
+    if body.category_name not in {c.name for c in db.get_categories()}:
+        raise HTTPException(400, "Rule category not found")
     db.upsert_keyword_rule(KeywordRule(id=rule_id, keyword=body.keyword,
                                        category_name=body.category_name,
                                        match_field=body.match_field,

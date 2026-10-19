@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { TOTAL_BUDGET, type BudgetsStatus, type BudgetRow } from '../../api/client'
 import { fmt } from '../../utils/money'
+import { formatMonthLabel } from '../../utils/date'
 import { budgetBarColor, budgetBarWidth } from '../../utils/budgetDisplay'
 
 interface Props {
@@ -15,7 +16,7 @@ export default function BudgetsWidget({ budgets, totalBudget, widgetRows }: Prop
   return (
     <div className="card">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <div className="section-title" style={{ marginBottom: 0 }}>Budgets</div>
+        <div className="section-title" style={{ marginBottom: 0 }}>Budgets · {formatMonthLabel(budgets.month)}</div>
         <button className="btn-link" onClick={() => navigate('/budgets')}>Manage →</button>
       </div>
       {totalBudget && (
@@ -50,14 +51,14 @@ export default function BudgetsWidget({ budgets, totalBudget, widgetRows }: Prop
       </div>
       <div style={{ fontSize: '11.5px', color: 'var(--ink-faint)', marginTop: 12 }}>
         {(() => {
-          const activeCount = budgets.budgets.filter(b => b.active && b.category_name !== TOTAL_BUDGET).length
+          const activeCount = budgets.budgets.filter(b => b.active && !b.orphaned && b.category_name !== TOTAL_BUDGET).length
           // budgets.totals excludes the "All spending" cap — fall back to it
           // when it's the only active budget, same as the Budgets page.
           const remaining = activeCount === 0 && totalBudget ? totalBudget.remaining : budgets.totals.remaining
-          const label = `budget${activeCount === 1 ? '' : 's'}`
+          const label = `budget${(activeCount || 1) === 1 ? '' : 's'}`
           return remaining >= 0
-            ? `${fmt(remaining, budgets.currency)} left across ${activeCount || 1} ${label} this month`
-            : `${fmt(Math.abs(remaining), budgets.currency)} over across ${activeCount || 1} ${label} this month`
+            ? `${fmt(remaining, budgets.currency)} left across ${activeCount || 1} ${label} in ${formatMonthLabel(budgets.month)}`
+            : `${fmt(Math.abs(remaining), budgets.currency)} over across ${activeCount || 1} ${label} in ${formatMonthLabel(budgets.month)}`
         })()}
       </div>
     </div>

@@ -1,43 +1,23 @@
-import MoneyChart from '../../components/MoneyChart'
+import { ACCOUNT_TYPE_LABELS } from '../../constants'
+import { Link } from 'react-router-dom'
+import { fmt } from '../../utils/money'
 import type { Metrics } from './data'
 
-interface Props {
-  metrics: Metrics
-  allocTrace: Plotly.Data[]
-  inkColor: string
-}
-
-export default function AllocationCard({ metrics, allocTrace, inkColor }: Props) {
+export default function AllocationCard({ metrics, currency }: { metrics: Metrics; currency: string }) {
+  const positiveTotal = metrics.byType.reduce((sum, g) => sum + Math.max(0, g.now), 0)
   return (
-    <div className="card">
-      <div className="section-title" style={{ marginBottom: 10 }}>Allocation</div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
-        <div style={{ position: 'relative', width: 150, height: 150, flexShrink: 0 }}>
-          <MoneyChart
-            data={allocTrace}
-            layout={{ showlegend: false, margin: { t: 0, b: 0, l: 0, r: 0 } }}
-            style={{ height: 150 }}
-          />
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-            <div style={{ fontSize: 21, fontWeight: 700, color: inkColor, fontVariantNumeric: 'tabular-nums' }}>
-              €{Math.round(metrics.totalNow / 1000)}k
-            </div>
-            <div style={{ fontSize: 9, letterSpacing: '1.4px', color: 'var(--ink-faint)' }}>NET WORTH</div>
-          </div>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, minWidth: 0 }}>
-          {metrics.byType.map(g => (
-            <div key={g.type} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
-              <span style={{ width: 9, height: 9, borderRadius: 3, background: g.color, flexShrink: 0 }} />
-              <span style={{ color: 'var(--ink-soft)', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{g.type}</span>
-              <span style={{ color: 'var(--ink)', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>€{Math.round(g.now / 1000)}k</span>
-              <span style={{ color: 'var(--ink-ghost)', fontVariantNumeric: 'tabular-nums', minWidth: 38, textAlign: 'right' }}>
-                {((g.now / metrics.totalNow) * 100).toFixed(1)}%
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
+    <section className="card" aria-labelledby="allocation-heading">
+      <div className="dashboard-section-header"><div><h2 id="allocation-heading">Composizione del patrimonio</h2><p>Ultimi saldi registrati · {currency}</p></div><Link className="btn-link" to="/accounts">Gestisci →</Link></div>
+      {positiveTotal > 0 && <div className="allocation-strip" aria-hidden="true">
+        {metrics.byType.filter(g => g.now > 0).map(g => <span key={g.type} style={{ flex: g.now / positiveTotal, background: g.color }} />)}
+      </div>}
+      <ul className="allocation-list">
+        {metrics.byType.map(g => <li key={g.type}>
+          <span className="allocation-dot" style={{ background: g.color }} aria-hidden="true" />
+          <div><strong>{ACCOUNT_TYPE_LABELS[g.type] ?? g.type}</strong><small>{g.accounts.length} {g.accounts.length === 1 ? 'conto' : 'conti'}</small></div>
+          <div className="allocation-amount"><strong>{fmt(g.now, currency)}</strong><small>{g.now < 0 ? 'Saldo negativo' : positiveTotal > 0 ? `${(g.now / positiveTotal * 100).toFixed(1)}% dei saldi positivi` : 'Nessun saldo positivo'}</small></div>
+        </li>)}
+      </ul>
+    </section>
   )
 }

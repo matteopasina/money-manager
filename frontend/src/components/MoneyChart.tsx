@@ -1,8 +1,11 @@
-import PlotlyImport from 'react-plotly.js'
+import createPlotlyComponent from 'react-plotly.js/factory'
+import PlotlyBasic from 'plotly.js/dist/plotly-basic.min.js'
+import { useEffect, useRef, useState } from 'react'
 import { useTheme } from '../useTheme'
-// react-plotly.js is CJS; Vite's interop may wrap it — unwrap if needed
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const Plot = ((PlotlyImport as any).default ?? PlotlyImport) as typeof PlotlyImport
+// Only the scatter, bar and pie trace families used by this application.
+// The CommonJS factory is wrapped once more by Vite in development.
+const createPlot = (createPlotlyComponent as unknown as { default?: typeof createPlotlyComponent }).default ?? createPlotlyComponent
+const Plot = createPlot(PlotlyBasic)
 
 const FONT_FAMILY = "'Hanken Grotesk', -apple-system, sans-serif"
 
@@ -10,16 +13,16 @@ const LIGHT_LAYOUT = {
   template: 'plotly_white' as const,
   paper_bgcolor: 'rgba(0,0,0,0)',
   plot_bgcolor:  'rgba(0,0,0,0)',
-  font: { family: FONT_FAMILY, color: '#A89D88', size: 10.5 },
+  font: { family: FONT_FAMILY, color: '#716653', size: 10.5 },
   margin: { t: 36, b: 50, l: 52, r: 0 },
   xaxis: {
     gridcolor: '#E7DECC', linecolor: '#E7DECC',
-    tickfont: { color: '#A89D88', size: 10.5, family: FONT_FAMILY },
+    tickfont: { color: '#716653', size: 10.5, family: FONT_FAMILY },
     zerolinecolor: '#E7DECC',
   },
   yaxis: {
     gridcolor: '#E7DECC', linecolor: '#E7DECC',
-    tickfont: { color: '#A89D88', size: 10.5, family: FONT_FAMILY },
+    tickfont: { color: '#716653', size: 10.5, family: FONT_FAMILY },
     zerolinecolor: '#E7DECC',
   },
   legend: {
@@ -34,16 +37,16 @@ const DARK_LAYOUT = {
   template: 'plotly_dark' as const,
   paper_bgcolor: 'rgba(0,0,0,0)',
   plot_bgcolor:  'rgba(0,0,0,0)',
-  font: { family: FONT_FAMILY, color: '#8C8068', size: 10.5 },
+  font: { family: FONT_FAMILY, color: '#B5A68B', size: 10.5 },
   margin: { t: 36, b: 50, l: 52, r: 0 },
   xaxis: {
     gridcolor: '#3A3328', linecolor: '#3A3328',
-    tickfont: { color: '#8C8068', size: 10.5, family: FONT_FAMILY },
+    tickfont: { color: '#B5A68B', size: 10.5, family: FONT_FAMILY },
     zerolinecolor: '#3A3328',
   },
   yaxis: {
     gridcolor: '#3A3328', linecolor: '#3A3328',
-    tickfont: { color: '#8C8068', size: 10.5, family: FONT_FAMILY },
+    tickfont: { color: '#B5A68B', size: 10.5, family: FONT_FAMILY },
     zerolinecolor: '#3A3328',
   },
   legend: {
@@ -62,17 +65,40 @@ interface Props {
 }
 
 export default function MoneyChart({ data, layout = {}, style, config }: Props) {
-  const { isDark } = useTheme()
-  const base = isDark ? DARK_LAYOUT : LIGHT_LAYOUT
+  const { isDark, visualStyle } = useTheme()
+  const container = useRef<HTMLDivElement>(null)
+  const [width, setWidth] = useState<number>()
+  useEffect(() => {
+    const element = container.current
+    if (!element) return
+    // Charts can change size without a window resize, e.g. opening account history.
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry.contentRect.width > 0) setWidth(Math.floor(entry.contentRect.width))
+    })
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [])
+  const standard = isDark ? DARK_LAYOUT : LIGHT_LAYOUT
+  const arcadeFont = { family: "'IBM Plex Mono', monospace", color: isDark ? '#ADBF9F' : '#50634C', size: 11 }
+  const gridcolor = isDark ? '#456348' : '#AFBCA0'
+  const base = visualStyle === 'arcade' ? {
+    ...standard,
+    font: arcadeFont,
+    xaxis: { ...standard.xaxis, gridcolor, linecolor: gridcolor, zerolinecolor: gridcolor, tickfont: arcadeFont },
+    yaxis: { ...standard.yaxis, gridcolor, linecolor: gridcolor, zerolinecolor: gridcolor, tickfont: arcadeFont },
+    legend: { ...standard.legend, font: arcadeFont, bgcolor: isDark ? '#1A3831' : '#F4F5E8', bordercolor: gridcolor },
+  } : standard
   const merged = {
     ...base,
     ...layout,
+    width: layout.width ?? width,
     xaxis: { ...base.xaxis, ...(layout.xaxis as object || {}) },
     yaxis: { ...base.yaxis, ...(layout.yaxis as object || {}) },
     legend: { ...base.legend, ...(layout.legend as object || {}) },
   }
 
   return (
+    <div ref={container} style={{ width: '100%', minWidth: 0, overflow: 'hidden' }}>
     <Plot
       data={data}
       layout={merged as Partial<Plotly.Layout>}
@@ -80,6 +106,7 @@ export default function MoneyChart({ data, layout = {}, style, config }: Props) 
       config={{ displayModeBar: false, responsive: true, ...config }}
       useResizeHandler
     />
+    </div>
   )
 }
 
@@ -96,14 +123,7 @@ export const RANGE_BUTTONS = [
 export const RANGE_XAXIS: Partial<Plotly.Layout['xaxis']> = {
   // Cast is required: plotly.js typedefs don't expose rangeselector/rangeslider
   // on LayoutAxis in all versions — keep the cast here so callers don't need it.
-  rangeselector: RANGE_BUTTONS as unknown as Plotly.Layout['xaxis']['rangeselector'],
+  rangeselector: { buttons: RANGE_BUTTONS },
   rangeslider: { visible: false } as Plotly.Layout['xaxis']['rangeslider'],
 }
-
-// Warm tonal "Meridian" categorical palette — gold, forest, umber, tan, clay, repeating.
-// eslint-disable-next-line react-refresh/only-export-components
-export const ACCOUNT_PALETTE = [
-  '#B8842B', '#3F7A55', '#6E5A3E', '#A88B5C', '#C97B4A',
-  '#8C9A6B', '#9A6B4A', '#7A8C6B', '#B0915C', '#5C7A6E',
-]
 

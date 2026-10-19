@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../api/client'
 import LoadingSpinner from '../components/LoadingSpinner'
 import Alert from '../components/Alert'
@@ -9,9 +9,11 @@ import { useApi } from '../hooks/useApi'
 
 type SortKey = 'date' | 'account' | 'amount_native' | 'amount_base'
 
-export default function Balances() {
+export default function Balances({ embedded = false, accountsVersion = 0 }: { embedded?: boolean; accountsVersion?: number }) {
+  const Heading = embedded ? 'h2' : 'h1'
   const navigate = useNavigate()
-  const [filterAccount, setFilterAccount] = useState('')
+  const [searchParams] = useSearchParams()
+  const [filterAccount, setFilterAccount] = useState(searchParams.get('account_id') ?? '')
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editVals, setEditVals]   = useState({ amount_native: '', amount_base: '' })
   const [saving, setSaving]       = useState(false)
@@ -19,9 +21,9 @@ export default function Balances() {
   const [sortKey, setSortKey]     = useState<SortKey>('date')
   const [sortDir, setSortDir]     = useState<'asc' | 'desc'>('desc')
 
-  const [showAddForm, setShowAddForm] = useState(false)
+  const [showAddForm, setShowAddForm] = useState(searchParams.get('action') === 'add')
   const [addForm, setAddForm] = useState({
-    account_id: '',
+    account_id: searchParams.get('account_id') ?? '',
     date: todayLocal(),
     amount_native: '',
     amount_base: '',
@@ -31,7 +33,7 @@ export default function Balances() {
     () => Promise.all([
       api.balances.list(), api.accounts.list(true), api.accounts.fxRates(), api.settings.all(),
     ]),
-    [],
+    [accountsVersion],
   )
   const rows = useMemo(() => loaded?.[0] ?? [], [loaded])
   const accounts = useMemo(() => loaded?.[1] ?? [], [loaded])
@@ -71,7 +73,7 @@ export default function Balances() {
     e.preventDefault()
     if (!addForm.account_id || !addForm.date || !addForm.amount_native) return
     if (isAddNonBase && !addForm.amount_base) {
-      setMsg({ type: 'error', text: `No FX rate on file for ${selectedAddAccount?.currency}. Set one on the Accounts & FX page, or enter the ${baseCurrency} amount manually above.` })
+      setMsg({ type: 'error', text: `Nessun cambio registrato per ${selectedAddAccount?.currency}. Set one on the Accounts & FX page, oppure inserisci ${baseCurrency} amount manually above.` })
       return
     }
     setSaving(true)
@@ -150,8 +152,8 @@ export default function Balances() {
 
   if (error) return (
     <div>
-      <div className="page-header"><h1>Balances</h1></div>
-      <Alert type="error">Couldn't load balances: {error}</Alert>
+      <div className="page-header"><Heading>Saldi registrati</Heading></div>
+      <Alert type="error">Impossibile caricare i saldi: {error}</Alert>
     </div>
   )
 
@@ -159,13 +161,13 @@ export default function Balances() {
     <div>
       <div className="page-header">
         <div>
-          <h1>Balances</h1>
-          <p>Record and review balance snapshots for each account</p>
+          <Heading>Saldi registrati</Heading>
+          <p>Aggiungi e controlla i saldi dei tuoi conti</p>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button className="btn btn-secondary" onClick={() => navigate('/import')}>↥ Import instead</button>
+          <button className="btn btn-secondary" onClick={() => navigate('/import?type=balances')}>↥ Importa saldi</button>
           <button className="btn btn-primary" onClick={() => setShowAddForm(s => !s)}>
-            {showAddForm ? 'Cancel' : '+ Add balance'}
+            {showAddForm ? 'Annulla' : '+ Aggiungi saldo'}
           </button>
         </div>
       </div>
@@ -174,24 +176,24 @@ export default function Balances() {
 
       {showAddForm && (
         <div className="card" style={{ marginBottom: '1.25rem' }}>
-          <div className="section-title" style={{ fontSize: '1rem', marginBottom: '1rem' }}>Record a balance</div>
+          <div className="section-title" style={{ fontSize: '1rem', marginBottom: '1rem' }}>Registra un saldo</div>
           <form onSubmit={submitAdd}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr 1fr', gap: '0.9rem', alignItems: 'end' }}>
+            <div className="balance-form-grid">
               <div className="form-group" style={{ margin: 0 }}>
-                <label>Account</label>
-                <select value={addForm.account_id} onChange={e => onAddAccountChange(e.target.value)} required>
-                  <option value="">Select account…</option>
+                <label htmlFor="balance-account">Conto</label>
+                <select id="balance-account" value={addForm.account_id} onChange={e => onAddAccountChange(e.target.value)} required>
+                  <option value="">Seleziona un conto…</option>
                   {accounts.map(a => <option key={a.id} value={String(a.id)}>{a.name} ({a.currency})</option>)}
                 </select>
               </div>
               <div className="form-group" style={{ margin: 0 }}>
-                <label>Date</label>
-                <input type="date" value={addForm.date} onChange={e => setAddForm(f => ({ ...f, date: e.target.value }))} required />
+                <label htmlFor="balance-date">Data</label>
+                <input id="balance-date" type="date" value={addForm.date} onChange={e => setAddForm(f => ({ ...f, date: e.target.value }))} required />
               </div>
               <div className="form-group" style={{ margin: 0 }}>
-                <label>Amount {selectedAddAccount ? `(${selectedAddAccount.currency})` : ''}</label>
+                <label htmlFor="balance-native">Importo {selectedAddAccount ? `(${selectedAddAccount.currency})` : ''}</label>
                 <input
-                  type="number" step="0.01" placeholder="0.00"
+                  id="balance-native" type="number" step="0.01" placeholder="0.00"
                   value={addForm.amount_native}
                   onChange={e => onAddAmountNativeChange(e.target.value)}
                   required
@@ -202,7 +204,7 @@ export default function Balances() {
             {isAddNonBase && (
               <div className="form-group" style={{ maxWidth: 340, marginTop: '0.9rem' }}>
                 <label>
-                  Amount in base currency ({baseCurrency})
+                  Importo nella valuta di riferimento ({baseCurrency})
                   {!missingRate && (
                     <span style={{ color: 'var(--ink-faint)', fontWeight: 400, marginLeft: 8 }}>
                       · rate 1 {selectedAddAccount!.currency} = {getRate(selectedAddAccount!.currency)} {baseCurrency}
@@ -216,23 +218,23 @@ export default function Balances() {
                 />
                 {missingRate && (
                   <p style={{ fontSize: '0.75rem', color: 'var(--loss)', marginTop: 4 }}>
-                    No FX rate on file for {selectedAddAccount!.currency}. <a href="/accounts" onClick={e => { e.preventDefault(); navigate('/accounts') }}>Set one on Accounts &amp; FX</a>, or enter the {baseCurrency} amount above.
+                    Nessun cambio registrato per {selectedAddAccount!.currency}. <a href="/settings/currencies" onClick={e => { e.preventDefault(); navigate('/settings/currencies') }}>Impostalo in Valute e cambi</a>, oppure inserisci {baseCurrency} qui sopra.
                   </p>
                 )}
               </div>
             )}
 
             <button className="btn btn-primary" type="submit" disabled={saving || (missingRate && !addForm.amount_base)} style={{ marginTop: '1.1rem' }}>
-              {saving ? 'Saving…' : 'Record Balance'}
+              {saving ? 'Salvataggio…' : 'Registra saldo'}
             </button>
           </form>
         </div>
       )}
 
       <div style={{ marginBottom: '1rem', maxWidth: 300 }}>
-        <label className="metric-label" style={{ marginBottom: '0.25rem', display: 'block' }}>Filter by account</label>
+        <label className="metric-label" style={{ marginBottom: '0.25rem', display: 'block' }}>Filtra per conto</label>
         <select value={filterAccount} onChange={e => setFilterAccount(e.target.value)}>
-          <option value="">All accounts</option>
+          <option value="">Tutti i conti</option>
           {accounts.map(a => <option key={a.id} value={String(a.id)}>{a.name}</option>)}
         </select>
       </div>
@@ -242,11 +244,11 @@ export default function Balances() {
           <thead>
             <tr>
               {([
-                ['date', 'Date', 'left'],
-                ['account', 'Account', 'left'],
-                [null, 'Currency', 'left'],
-                ['amount_native', 'Amount (native)', 'right'],
-                ['amount_base', 'Amount (base)', 'right'],
+                ['date', 'Data', 'left'],
+                ['account', 'Conto', 'left'],
+                [null, 'Valuta', 'left'],
+                ['amount_native', 'Importo originale', 'right'],
+                ['amount_base', 'Importo convertito', 'right'],
               ] as [SortKey | null, string, string][]).map(([key, label, align]) => (
                 <th
                   key={label}
@@ -303,7 +305,7 @@ export default function Balances() {
                         >
                           Edit
                         </button>
-                        <button className="btn btn-danger btn-sm" onClick={() => deleteRow(r.id)} disabled={saving}>Delete</button>
+                        <button className="btn btn-danger btn-sm" onClick={() => deleteRow(r.id)} disabled={saving}>Elimina</button>
                       </div>
                     </td>
                   </>

@@ -12,7 +12,7 @@ from datetime import date
 from typing import Any
 
 import database as db
-from categoriser import categorise, recategorise_all
+from categoriser import matching_category, recategorise_all
 from domain import Budget, Category, KeywordRule
 
 TOTAL_BUDGET = "__total__"
@@ -215,8 +215,8 @@ def preview_reapply_keyword_rules(inputs: dict[str, Any] | None = None) -> str:
         ).fetchall()
 
     for row in rows:
-        new_category = categorise(row["description"], row["reference"] or "", rules)
-        if new_category != row["category"]:
+        new_category = matching_category(row["description"], row["reference"] or "", rules)
+        if new_category is not None and new_category != row["category"]:
             changes.append({
                 "id": row["id"],
                 "date": row["date"],

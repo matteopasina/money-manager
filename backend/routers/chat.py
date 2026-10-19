@@ -124,7 +124,7 @@ TOOLS = [
     }},
     {"type": "function", "function": {
         "name": "preview_reapply_keyword_rules",
-        "description": "Preview category changes before reapplying keyword rules to all transactions.",
+        "description": "Preview category changes from matching keyword rules. Unmatched transactions keep their existing category.",
         "parameters": {"type": "object", "properties": {
             "limit": {"type": "integer", "description": "Maximum sample rows to return"},
         }, "required": []},
@@ -132,8 +132,9 @@ TOOLS = [
     {"type": "function", "function": {
         "name": "reapply_keyword_rules",
         "description": (
-            "WRITE: Reapply keyword rules to all transactions only after showing preview_reapply_keyword_rules "
-            "and receiving explicit user approval. Must pass confirm=true."
+            "WRITE: Apply matching keyword rules only after showing preview_reapply_keyword_rules "
+            "and receiving explicit user approval. Unmatched transactions keep their existing category. "
+            "Must pass confirm=true."
         ),
         "parameters": {"type": "object", "properties": {
             "confirm": {"type": "boolean", "description": "Must be true after explicit user approval"},
@@ -203,6 +204,16 @@ def chat(body: ChatRequest):
 
     for _ in range(8):
         kwargs: dict = {"model": body.model, "messages": messages, "tools": TOOLS, "tool_choice": "auto"}
+        # Luna models default to reasoning_effort="medium", but OpenAI's Chat
+        # Completions endpoint does not support function tools with reasoning
+        # enabled for these models. Keep this compatibility override scoped to
+        # Luna; LiteLLM's Responses API supports reasoning with tools.
+        if body.model.rsplit("/", 1)[-1] in {"gpt-5.6-luna", "gpt-6-luna"}:
+            kwargs["reasoning_effort"] = "none"
+            # Older LiteLLM metadata omits reasoning_effort for GPT-6 Luna
+            # and tool_choice for GPT-5.6 Luna. Keep both explicit tool-loop
+            # parameters through validation rather than dropping them globally.
+            kwargs["allowed_openai_params"] = ["reasoning_effort", "tool_choice"]
         if api_key:
             kwargs["api_key"] = api_key
 

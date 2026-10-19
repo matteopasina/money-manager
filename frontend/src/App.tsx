@@ -1,128 +1,115 @@
-import { useEffect, useState } from 'react'
-import { BrowserRouter, NavLink, Routes, Route, Navigate, useLocation } from 'react-router-dom'
-import {
-  LayoutDashboard, Receipt, Wallet, UploadCloud,
-  TrendingUp, Tag, Settings, Plug, SlidersHorizontal, PiggyBank,
-  Sparkles, Menu, X,
-} from 'lucide-react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { BrowserRouter, Link, NavLink, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { PixelFlame, PixelNavIcon, PixelVisitor } from './components/arcade/PixelArt'
+import { Menu, X } from 'lucide-react'
+import { primaryNavigation, settingsNavigation, wealthSections, activitySections, settingsSections, legacyDestinations, navigationOwner } from './navigation/config'
+import LegacyRedirect from './navigation/LegacyRedirect'
+import SectionLayout from './components/workspace/SectionLayout'
 import { ThemeProvider } from './ThemeContext'
 import fuocoLogo from './assets/fuoco-logo.png'
 import fuocoWordmark from './assets/fuoco-wordmark.png'
 import './styles/globals.css'
-import Dashboard from './pages/Dashboard'
-import FinancialHelper from './pages/FinancialHelper'
-import Transactions from './pages/Transactions'
-import Balances from './pages/Balances'
-import Import from './pages/Import'
-import Projections from './pages/Projections'
-import Budgets from './pages/Budgets'
-import Accounts from './pages/Accounts'
-import Categories from './pages/Categories'
-import Connections from './pages/Connections'
-import Preferences from './pages/Preferences'
+import './styles/workspace.css'
+import './styles/home.css'
+import './styles/arcade.css'
+import LoadingSpinner from './components/LoadingSpinner'
+const Dashboard = lazy(() => import('./pages/Dashboard'))
+const FinancialHelper = lazy(() => import('./pages/FinancialHelper'))
+const Transactions = lazy(() => import('./pages/Transactions'))
+const Import = lazy(() => import('./pages/Import'))
+const Projections = lazy(() => import('./pages/Projections'))
+const Predictions = lazy(() => import('./pages/Predictions'))
+const GoalCalculator = lazy(() => import('./pages/GoalCalculator'))
+const WealthOverview = lazy(() => import('./pages/wealth/WealthOverview'))
+const WealthAccounts = lazy(() => import('./pages/wealth/WealthAccounts'))
+const Investments = lazy(() => import('./pages/wealth/Investments'))
+const Budgets = lazy(() => import('./pages/Budgets'))
+const Accounts = lazy(() => import('./pages/Accounts'))
+const Categories = lazy(() => import('./pages/Categories'))
+const Connections = lazy(() => import('./pages/Connections'))
+const Preferences = lazy(() => import('./pages/Preferences'))
 
-const NAV_OVERVIEW = [
-  { to: '/dashboard',    icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/financial-helper', icon: Sparkles, label: 'Financial Helper' },
-]
-
-const NAV_ACTIVITY = [
-  { to: '/transactions', icon: Receipt,     label: 'Transactions' },
-  { to: '/balances',     icon: Wallet,      label: 'Balances' },
-  { to: '/import',       icon: UploadCloud, label: 'Import' },
-]
-
-const NAV_PLAN = [
-  { to: '/budgets',      icon: PiggyBank,  label: 'Budgets' },
-  { to: '/projections',  icon: TrendingUp, label: 'Projections' },
-]
-
-const NAV_SETUP = [
-  { to: '/accounts',     icon: Settings,          label: 'Accounts & FX' },
-  { to: '/categories',   icon: Tag,               label: 'Categories & Rules' },
-  { to: '/connections',  icon: Plug,              label: 'Connections' },
-  { to: '/preferences',  icon: SlidersHorizontal, label: 'Preferences' },
-]
-
-function NavGroup({
-  label,
-  items,
-  onNavigate,
-}: {
-  label: string
-  items: typeof NAV_OVERVIEW
-  onNavigate?: () => void
-}) {
-  return (
-    <div className="nav-group">
-      <div className="nav-section-label">{label}</div>
-      {items.map(({ to, icon: Icon, label: l }) => (
-        <NavLink
-          key={to}
-          to={to}
-          onClick={onNavigate}
-          className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}
-        >
-          <span className="nav-link-dot" />
-          {l}
-          <Icon size={14} style={{ marginLeft: 'auto', opacity: 0.6, flexShrink: 0 }} />
-        </NavLink>
-      ))}
-    </div>
-  )
-}
+const DesignSystem = lazy(() => import('./pages/DesignSystem'))
 
 function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
-  return (
-    <>
-      <div className="nav-brand">
-        <img className="nav-brand-mark" src={fuocoLogo} alt="" />
-        <img className="nav-brand-wordmark" src={fuocoWordmark} alt="FUOCO" />
-      </div>
-      <NavGroup label="Overview" items={NAV_OVERVIEW} onNavigate={onNavigate} />
-      <NavGroup label="Activity" items={NAV_ACTIVITY} onNavigate={onNavigate} />
-      <NavGroup label="Plan" items={NAV_PLAN} onNavigate={onNavigate} />
-      <NavGroup label="Setup" items={NAV_SETUP} onNavigate={onNavigate} />
-    </>
-  )
+  const location = useLocation()
+  const owner = navigationOwner(location.pathname, location.search)
+  return <>
+    <div className="nav-brand">
+      <img className="nav-brand-mark" src={fuocoLogo} alt="" />
+      <img className="nav-brand-wordmark" src={fuocoWordmark} alt="FUOCO" /><span className="arcade-brand"><PixelFlame /><span>fuoco</span></span>
+    </div>
+    <div className="nav-primary">{primaryNavigation.map(({ to, icon: Icon, label }) =>
+      <Link key={to} to={to} onClick={onNavigate} aria-current={owner?.to === to ? 'page' : undefined} className={`nav-link${owner?.to === to ? ' active' : ''}`}>
+        <Icon className="editorial-nav-icon" size={19} aria-hidden="true" /><PixelNavIcon path={to} />{label}
+      </Link>)}</div>
+    <div className="nav-footer"><PixelVisitor />{settingsNavigation.map(({ to, icon: Icon, label }) =>
+      <Link key={to} to={to} onClick={onNavigate} aria-current={owner?.to === to ? 'page' : undefined} className={`nav-link${owner?.to === to ? ' active' : ''}`}>
+        <Icon className="editorial-nav-icon" size={19} aria-hidden="true" /><PixelNavIcon path={to} />{label}
+      </Link>)}<p>Un po’ più di spazio, ogni giorno.</p></div>
+  </>
 }
 
-function AppShell() {
+export function AppShell() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const location = useLocation()
+  const [navPath, setNavPath] = useState(location.pathname)
+  const main = useRef<HTMLElement>(null)
+  const menuButton = useRef<HTMLButtonElement>(null)
+  const drawer = useRef<HTMLDivElement>(null)
+  if (navPath !== location.pathname) {
+    setNavPath(location.pathname)
+    setMobileNavOpen(false)
+  }
 
-  const currentLabel = [...NAV_OVERVIEW, ...NAV_ACTIVITY, ...NAV_PLAN, ...NAV_SETUP]
-    .find(item => item.to === location.pathname)?.label ?? 'FUOCO'
+  const currentLabel = location.pathname === '/import' ? 'Importa dati' : navigationOwner(location.pathname, location.search)?.label ?? 'FUOCO'
+
+  useEffect(() => { main.current?.scrollTo?.({ top: 0 }) }, [location.pathname])
 
   function closeMobileNav() {
     setMobileNavOpen(false)
   }
 
   useEffect(() => {
-    closeMobileNav()
-  }, [location.pathname])
-
-  useEffect(() => {
     if (!mobileNavOpen) return
+    const trigger = menuButton.current
+    const links = drawer.current?.querySelectorAll<HTMLElement>('a, button')
+    links?.[0]?.focus()
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') closeMobileNav()
+      if (event.key !== 'Tab' || !links?.length) return
+      const first = links[0], last = links[links.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault(); last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault(); first.focus()
+      }
     }
+    const desktop = window.matchMedia('(min-width: 921px)')
+    function onResize() { if (desktop.matches) closeMobileNav() }
+    desktop.addEventListener('change', onResize)
     window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
+    return () => {
+      desktop.removeEventListener('change', onResize)
+      window.removeEventListener('keydown', onKeyDown)
+      trigger?.focus()
+    }
   }, [mobileNavOpen])
 
   return (
     <div className="layout">
-      <header className="mobile-topbar">
+      <header className="mobile-topbar" inert={mobileNavOpen}>
         <div className="mobile-brand">
           <img className="mobile-brand-mark" src={fuocoLogo} alt="" />
-          <img className="mobile-brand-wordmark" src={fuocoWordmark} alt="FUOCO" />
+          <img className="mobile-brand-wordmark" src={fuocoWordmark} alt="FUOCO" /><span className="arcade-brand"><PixelFlame /><span>fuoco</span></span>
         </div>
         <div className="mobile-route-label">{currentLabel}</div>
         <button
           type="button"
           className="mobile-menu-button"
-          aria-label={mobileNavOpen ? 'Close navigation' : 'Open navigation'}
+          aria-label={mobileNavOpen ? 'Chiudi navigazione' : 'Apri navigazione'}
+          ref={menuButton}
+          aria-controls="mobile-navigation"
           aria-expanded={mobileNavOpen}
           onClick={() => setMobileNavOpen(open => !open)}
         >
@@ -130,7 +117,7 @@ function AppShell() {
         </button>
       </header>
 
-      <nav className="sidebar">
+      <nav className="sidebar" aria-label="Navigazione principale" inert={mobileNavOpen}>
         <Sidebar />
       </nav>
 
@@ -139,38 +126,48 @@ function AppShell() {
         onClick={closeMobileNav}
         aria-hidden="true"
       />
-      <nav
-        className={`mobile-sidebar${mobileNavOpen ? ' open' : ''}`}
-        aria-label="Mobile navigation"
-        aria-hidden={!mobileNavOpen}
+      {mobileNavOpen && <div
+        ref={drawer}
+        id="mobile-navigation"
+        className="mobile-sidebar open"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Navigazione"
       >
-        <Sidebar onNavigate={closeMobileNav} />
-      </nav>
+        <button className="mobile-menu-button drawer-close" aria-label="Chiudi navigazione" onClick={closeMobileNav}><X size={19} /></button>
+        <nav aria-label="Navigazione mobile"><Sidebar onNavigate={closeMobileNav} /></nav>
+      </div>}
 
-      <main className="main-content">
-        <Routes>
+      <main ref={main} className="main-content" inert={mobileNavOpen}>
+        <Suspense fallback={<LoadingSpinner />}><Routes>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/design-system" element={<DesignSystem />} />
           <Route path="/dashboard"       element={<Dashboard />} />
           <Route path="/financial-helper" element={<FinancialHelper />} />
-          <Route path="/transactions"    element={<Transactions />} />
-          <Route path="/balances"        element={<Balances />} />
-          <Route path="/import"          element={<Import />} />
-          <Route path="/projections"     element={<Projections />} />
-          <Route path="/budgets"         element={<Budgets />} />
-          <Route path="/accounts"        element={<Accounts />} />
-          <Route path="/categories"      element={<Categories />} />
-          <Route path="/connections"     element={<Connections />} />
-          <Route path="/preferences"     element={<Preferences />} />
-
-          {/* Old routes, kept as redirects for stale bookmarks/tabs */}
-          <Route path="/add-balance"     element={<Navigate to="/balances" replace />} />
-          <Route path="/manage-balances" element={<Navigate to="/balances" replace />} />
-          <Route path="/predictions"     element={<Navigate to="/projections" replace />} />
-          <Route path="/goal-calculator" element={<Navigate to="/projections" replace />} />
-          <Route path="/integrations"    element={<Navigate to="/connections" replace />} />
-          <Route path="/settings"        element={<Navigate to="/preferences" replace />} />
-          <Route path="/assistant"        element={<Navigate to="/financial-helper" replace />} />
-        </Routes>
+          <Route element={<SectionLayout title="Movimenti" description="Quello che entra, quello che esce. Tutto al suo posto." sections={activitySections} />}>
+            <Route path="/transactions" element={<Transactions embedded />} />
+            <Route path="/transactions/categories" element={<Categories embedded />} />
+          </Route>
+          <Route element={<SectionLayout title="Patrimonio" description="I tuoi conti, i tuoi investimenti e la strada fatta fin qui." sections={wealthSections} />}>
+            <Route path="/wealth" element={<WealthOverview />} />
+            <Route path="/wealth/accounts" element={<WealthAccounts />} />
+            <Route path="/wealth/investments" element={<Investments />} />
+          </Route>
+          <Route element={<Projections />}>
+            <Route path="/projections" element={<Predictions />} />
+            <Route path="/projections/goals" element={<GoalCalculator />} />
+          </Route>
+          <Route element={<SectionLayout title="Impostazioni" description="Collega i conti e scegli come usare Fuoco." sections={settingsSections} />}>
+            <Route path="/settings" element={<LegacyRedirect to="/settings/preferences" />} />
+            <Route path="/settings/connections" element={<Connections embedded />} />
+            <Route path="/settings/currencies" element={<Accounts mode="currencies" embedded />} />
+            <Route path="/settings/preferences" element={<Preferences embedded />} />
+          </Route>
+          <Route path="/import" element={<Import />} />
+          <Route path="/budgets" element={<Budgets />} />
+          {Object.entries(legacyDestinations).map(([from, to]) => <Route key={from} path={from} element={<LegacyRedirect to={to} />} />)}
+          <Route path="*" element={<div className="card"><h1>Pagina non trovata</h1><NavLink to="/dashboard">Torna al tuo quadro →</NavLink></div>} />
+        </Routes></Suspense>
       </main>
     </div>
   )

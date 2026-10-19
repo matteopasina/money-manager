@@ -4,7 +4,7 @@ These do heavier computation (regression, compound simulation) that used to
 live inline in Streamlit pages.
 """
 from datetime import date
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, field_validator
 
 import database as db
@@ -19,13 +19,14 @@ def _compute_cagr_data(df, tx_df=None) -> dict:
     Returns dict with keys: accounts, by_type, weighted_annual_return_pct.
     Returns empty dict (accounts=[], by_type=[], weighted=0) when data is sparse.
 
-    If tx_df (transactions DataFrame) is provided, applies the Modified Dietz
-    method: net cash flows (deposits, salary, expenses) are subtracted from the
-    ending balance so the CAGR reflects only organic growth (interest / gains).
+    Applies Modified Dietz with end-of-day external flows, then annualizes the
+    period result. Internal brokerage trades and distributions are not external
+    funding. These are estimates: incomplete funding history and different
+    measurement periods limit comparability across accounts.
     """
     import pandas as pd
 
-    df = df.copy()
+    df = df[df["date"] <= date.today().isoformat()].copy()
     df["date"] = pd.to_datetime(df["date"])
 
     tx_indexed: dict = {}
@@ -36,6 +37,7 @@ def _compute_cagr_data(df, tx_df=None) -> dict:
         for acc_id, grp_tx in tx_copy.groupby("account_id"):
             tx_indexed[int(acc_id)] = grp_tx
 
+    transfer_categories = db.get_transfer_category_names() - {"Trade"}
     accounts = []
     for (account_id, account_name, account_type), grp in df.groupby(
         ["account_id", "account", "account_type"]
@@ -54,16 +56,34 @@ def _compute_cagr_data(df, tx_df=None) -> dict:
         acc_tx = tx_indexed.get(int(account_id))
         if acc_tx is not None:
             period_tx = acc_tx[
-                (acc_tx["date"] >= first["date"]) & (acc_tx["date"] <= last["date"])
+                (acc_tx["date"] > first["date"]) & (acc_tx["date"] <= last["date"])
             ]
-            if not period_tx.empty:
-                net_flows = float(period_tx["flow"].sum())
-
-        adjusted_end = float(last["amount_base"]) - net_flows
-        if adjusted_end <= 0:
-            cagr = 0.0
+            if account_type in {"stocks", "crypto", "pension"}:
+                # Trades, dividends, taxes and fees are internal portfolio
+                # activity. Only funding/withdrawals are external cash flows.
+                period_tx = period_tx[
+                    period_tx["category"].isin(transfer_categories)
+                    | period_tx["reference"].fillna("").str.lower().eq("deposits/withdrawals")
+                ]
+            else:
+                period_tx = period_tx[~period_tx["category"].isin({"Trade", "Dividends"})]
+            net_flows = float(period_tx["flow"].sum())
         else:
-            cagr = (adjusted_end / float(first["amount_base"])) ** (1 / years) - 1
+            period_tx = None
+
+        # Modified Dietz, with end-of-day cash flows: weight deposits by the
+        # fraction of this measurement period for which they were invested.
+        weighted_flows = 0.0
+        if period_tx is not None and not period_tx.empty:
+            weights = (last["date"] - period_tx["date"]).dt.days / days
+            weighted_flows = float((period_tx["flow"] * weights).sum())
+        denominator = float(first["amount_base"]) + weighted_flows
+        if denominator <= 0:
+            continue  # No meaningful return on non-positive invested capital.
+        period_return = (float(last["amount_base"]) - float(first["amount_base"]) - net_flows) / denominator
+        if period_return < -1:
+            continue
+        cagr = (1 + period_return) ** (1 / years) - 1
         monthly_return_pct = ((1 + cagr) ** (1 / 12) - 1) * 100
         accounts.append({
             "account": account_name,
@@ -125,7 +145,7 @@ def account_returns():
 # ── Net worth regression forecast ─────────────────────────────────────────────
 
 @router.get("/forecast")
-def forecast(months_ahead: int = 12):
+def forecast(months_ahead: int = Query(default=12, ge=1, le=120)):
     import numpy as np
     import pandas as pd
     from dateutil.relativedelta import relativedelta
@@ -133,6 +153,7 @@ def forecast(months_ahead: int = 12):
     if df.empty or len(df) < 2:
         raise HTTPException(status_code=422, detail="Not enough balance data for forecasting (need at least 2 monthly snapshots)")
 
+    df = df[df["date"] <= date.today().isoformat()].copy()
     df["date"] = pd.to_datetime(df["date"])
     df = df.sort_values("date")
 
@@ -142,8 +163,10 @@ def forecast(months_ahead: int = 12):
     # then sum across accounts (same approach as the Dashboard net-worth chart).
     df["month"] = df["date"].dt.to_period("M")
     months = sorted(df["month"].unique())
+    if len(months) < 2:
+        raise HTTPException(422, "Forecasting needs snapshots in at least two different months")
     pivot = df.pivot_table(index="month", columns="account_id", values="amount_base", aggfunc="last")
-    pivot = pivot.reindex(months).ffill().fillna(0)
+    pivot = pivot.reindex(pd.period_range(months[0], months[-1], freq="M")).ffill().fillna(0)
     monthly = pd.DataFrame({
         "date": [m.to_timestamp() for m in pivot.index],
         "amount_base": pivot.sum(axis=1).values,
@@ -196,20 +219,22 @@ def fire_projection(params: FireParams):
     if df.empty:
         raise HTTPException(status_code=422, detail="No balance data — add at least one snapshot on the Accounts page")
 
+    df = df[df["date"] <= date.today().isoformat()].copy()
+    if df.empty:
+        raise HTTPException(422, "No balance snapshots on or before today")
     df["date"] = pd.to_datetime(df["date"])
     current_nw = float(df.sort_values("date").groupby("account_id").last()["amount_base"].sum())
 
     monthly_return = params.annual_return_pct / 100 / 12
+    averages = db.get_transaction_cash_flow_averages()
     monthly_contrib = params.monthly_contribution
     if monthly_contrib is None:
-        mean_income, _ = db.get_transaction_avg_income()
-        monthly_spend = db.get_transaction_monthly_spend()
-        monthly_contrib = max(0.0, mean_income - monthly_spend)
+        monthly_contrib = max(0.0, averages["income"] - averages["spending"])
 
     # Project forward until target reached or 600 months
     balance = current_nw
     projection = []
-    target_month = None
+    target_month = 0 if current_nw >= params.target_amount else None
     for i in range(600):
         balance = balance * (1 + monthly_return) + monthly_contrib
         d = date.today() + relativedelta(months=i+1)
@@ -217,12 +242,12 @@ def fire_projection(params: FireParams):
         if target_month is None and balance >= params.target_amount:
             target_month = i + 1
 
-    detected_expenses = db.get_transaction_monthly_spend()
+    detected_expenses = averages["spending"]
     monthly_expenses = params.monthly_expenses if params.monthly_expenses is not None else detected_expenses
     fire_number = monthly_expenses * 12 / (params.withdrawal_rate_pct / 100)
 
     # Detected values — shown in UI so user can understand the auto-calculation
-    detected_income, _ = db.get_transaction_avg_income()
+    detected_income = averages["income"]
     cagr_data = _compute_cagr_data(df, db.get_transactions_df())
     detected_return_pct = cagr_data["weighted_annual_return_pct"] or None
 
@@ -233,7 +258,7 @@ def fire_projection(params: FireParams):
         "fire_number": round(fire_number, 2),
         "target_amount": params.target_amount,
         "months_to_target": target_month,
-        "years_to_target": round(target_month / 12, 1) if target_month else None,
+        "years_to_target": round(target_month / 12, 1) if target_month is not None else None,
         "projection": projection[:240],  # max 20 years in response
         "currency": db.get_base_currency(),
         # Auto-detected from transaction/balance history (informational, for UI display)

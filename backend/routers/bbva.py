@@ -16,7 +16,7 @@ One-time setup flow:
 Enable Banking API docs: https://enablebanking.com/docs/api/reference/
 """
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -60,7 +60,7 @@ def connect(redirect_uri: str = Query(default="https://localhost:5173/connection
     if not aspsp_name or not aspsp_country:
         raise HTTPException(400, "Look up and save the BBVA institution first")
 
-    valid_until = (datetime.utcnow() + timedelta(days=180)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    valid_until = (datetime.now(timezone.utc) + timedelta(days=180)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
     data = _eb_post("/auth", {
         "aspsp": {"name": aspsp_name, "country": aspsp_country},
         "access": {"valid_until": valid_until},
@@ -93,32 +93,21 @@ def exchange_code(code: str = Query(...)):
 
 @router.get("/link-status")
 def link_status():
-    session_id = db.get_setting("bbva_eb_session_id", "").strip()
-    if not session_id:
-        return {"status": "not_connected"}
-    try:
-        data = _eb_get(f"/sessions/{session_id}")
-    except HTTPException:
-        return {"status": "expired"}
-    if data.get("status") != "AUTHORIZED":
-        return {"status": "expired"}
-    return {
-        "status": "active",
-        "account_uid": db.get_setting("bbva_eb_account_uid", "").strip(),
-        "account_count": len(data.get("accounts", [])),
-    }
+    return eb.session_status("bbva", get_page=_eb_get)
 
 
 # ── Sync transactions ─────────────────────────────────────────────────────────
 
 @router.post("/sync/transactions")
-def sync_transactions(account_id: int = Query(...), days: int = Query(default=90)):
+def sync_transactions(account_id: int = Query(...), days: int = Query(default=90, ge=1, le=90)):
     account = _get_account(account_id)
     uid = db.get_setting("bbva_eb_account_uid", "").strip()
     if not uid:
         raise HTTPException(400, "BBVA not linked — connect first in Connections")
 
-    date_from = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d")
+    # Both endpoints are inclusive: 90 days means today plus 89 earlier days.
+    today = datetime.now(timezone.utc).date()
+    date_from = (today - timedelta(days=days - 1)).isoformat()
     # Floor: Enable Banking sends Spanish descriptions while the historical
     # Excel imports were Italian, so the same transaction dodges the
     # (date, description, amount) dedup key. Never re-fetch the Excel-covered
@@ -126,8 +115,9 @@ def sync_transactions(account_id: int = Query(...), days: int = Query(default=90
     floor = db.get_setting("bbva_eb_tx_date_from", "").strip()
     if floor and floor > date_from:
         date_from = floor
-    data = _eb_get(f"/accounts/{uid}/transactions", {"date_from": date_from})
-    txns_data = data.get("transactions", [])
+    if date_from > today.isoformat():
+        raise HTTPException(400, "The configured transaction start date is in the future")
+    txns_data = eb.transactions(uid, date_from, today.isoformat(), get_page=_eb_get)
 
     rules  = db.get_keyword_rules()
     cat_fn = lambda desc, ref: categorise(desc, ref, rules)
@@ -191,7 +181,7 @@ def sync_balances(account_id: int = Query(...)):
     base     = db.get_base_currency().upper()
     rate     = db.get_rate(currency)
     amount_base = amount if currency == base else amount * rate
-    today    = datetime.utcnow().strftime("%Y-%m-%d")
+    today    = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     inserted = db.upsert_balances([(account.id, today, amount, round(amount_base, 4))])
     return {"inserted": inserted, "skipped": 0}

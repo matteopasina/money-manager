@@ -33,7 +33,7 @@ def update_category(transaction_id: int, body: CategoryUpdate):
 
 
 @router.get("/monthly-spend")
-def monthly_spend(months: int = 6):
+def monthly_spend(months: int = Query(default=6, ge=1, le=120)):
     return {"monthly_spend": db.get_transaction_monthly_spend(months)}
 
 

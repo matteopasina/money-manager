@@ -13,10 +13,30 @@ from categoriser import categorise
 
 router = APIRouter(prefix="/api/ib", tags=["ib"])
 
-_SEND_URL = "https://ndcdyn.interactivebrokers.com/Universal/servlet/FlexStatementService.SendRequest"
+_SEND_URL = "https://ndcdyn.interactivebrokers.com/AccountManagement/FlexWebService/SendRequest"
 
 
 def _fetch_flex_xml(token: str, query_id: str) -> str:
+    # Report generation can fail transiently even with a valid token.
+    for attempt in range(3):
+        try:
+            return _fetch_flex_xml_once(token, query_id)
+        except HTTPException as exc:
+            if exc.status_code != 503 or attempt == 2:
+                raise
+            time.sleep(2 * (attempt + 1))
+
+
+def _raise_flex_error(root: ET.Element) -> None:
+    code = root.findtext("ErrorCode") or "unknown"
+    message = root.findtext("ErrorMessage") or "Unexpected IB response"
+    if code in {"1012", "1015"}:
+        raise HTTPException(400, f"IB token is expired or invalid ({code}). Replace the Flex Web Service token in Connections.")
+    status = 503 if code in {"1001", "1009", "1021"} else 400
+    raise HTTPException(status, f"IB API ({code}): {message}")
+
+
+def _fetch_flex_xml_once(token: str, query_id: str) -> str:
     """Call IB Flex Query API and return the XML statement string.
 
     Polls until the statement is ready (IB typically takes 1-5 seconds).
@@ -30,13 +50,16 @@ def _fetch_flex_xml(token: str, query_id: str) -> str:
 
     root = ET.fromstring(body)
     if root.findtext("Status") != "Success":
-        err = root.findtext("ErrorMessage") or "Unknown IB error"
-        raise HTTPException(400, f"IB API: {err}")
+        _raise_flex_error(root)
 
     ref_code = root.findtext("ReferenceCode")
-    get_base = root.findtext("Url")
+    get_base = root.findtext("Url") or root.findtext("url")
     if not ref_code or not get_base:
         raise HTTPException(502, "IB API returned an unexpected response format")
+
+    # Older responses can still advertise the legacy servlet endpoint.
+    get_base = get_base.replace("/Universal/servlet/FlexStatementService.GetStatement",
+                                "/AccountManagement/FlexWebService/GetStatement")
 
     poll_url = f"{get_base}?q={ref_code}&t={token}&v=3"
     for attempt in range(12):
@@ -54,8 +77,7 @@ def _fetch_flex_xml(token: str, query_id: str) -> str:
         if root.findtext("ErrorCode") == "1019":
             continue  # "Statement generation in progress" — retry
 
-        err = root.findtext("ErrorMessage") or body[:300]
-        raise HTTPException(400, f"IB fetch error: {err}")
+        _raise_flex_error(root)
 
     raise HTTPException(504, "IB statement generation timed out after 25 seconds")
 

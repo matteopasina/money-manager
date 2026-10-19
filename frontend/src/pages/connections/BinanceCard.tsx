@@ -61,7 +61,8 @@ export default function BinanceCard({ accounts, initial, onMsg }: Props) {
       logo={<BinanceLogo />}
       name="Binance"
       description="Import deposits, withdrawals, converts, earn rewards, and daily portfolio value via the Binance API."
-      connected={configured}
+      connected={false}
+      statusLabel={configured ? 'Credentials saved' : 'Not configured'}
       guideOpen={guideOpen}
       onToggleGuide={() => setGuideOpen(o => !o)}
       guideSteps={BINANCE_GUIDE_STEPS}

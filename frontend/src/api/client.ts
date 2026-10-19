@@ -37,6 +37,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  stockPositions: {
+    list: () => request<StockPosition[]>('/stock-positions'),
+    save: (id: number, quantity: number) => request('/stock-positions/' + id, { method: 'PUT', body: JSON.stringify({ quantity }) }),
+    sync: () => request<{ message: string }>('/stock-positions/sync', { method: 'POST' }),
+  },
   // Accounts
   accounts: {
     list: (activeOnly = false) =>
@@ -158,7 +163,7 @@ export const api = {
         `/bbva/exchange-code?code=${encodeURIComponent(code)}`, { method: 'POST' }
       ),
     linkStatus: () =>
-      request<{ status: string; account_uid?: string; account_count?: number }>('/bbva/link-status'),
+      request<BankLinkStatus>('/bbva/link-status'),
     syncTransactions: (accountId: number, days = 90) =>
       request<{ inserted: number; skipped: number }>(
         `/bbva/sync/transactions?account_id=${accountId}&days=${days}`, { method: 'POST' }
@@ -183,7 +188,7 @@ export const api = {
         `/revolut/exchange-code?code=${encodeURIComponent(code)}`, { method: 'POST' }
       ),
     linkStatus: () =>
-      request<{ status: string; accounts?: { uid: string; name: string; currency: string }[] }>('/revolut/link-status'),
+      request<BankLinkStatus>('/revolut/link-status'),
     syncTransactions: (accountId: number, days = 90) =>
       request<{ inserted: number; skipped: number }>(
         `/revolut/sync/transactions?account_id=${accountId}&days=${days}`, { method: 'POST' }
@@ -242,6 +247,23 @@ export const api = {
     cleanup: (limit = 80) =>
       request<AssistantCleanup>(`/assistant/cleanup?limit=${limit}`),
   },
+}
+
+export interface StockPosition {
+  account_id: number
+  account: string
+  symbol: string
+  quantity: number
+  valuation: null | {
+    price_usd: number
+    quoted_at: string
+    fx_date: string
+    usd_to_base: number
+    base_currency: string
+    amount_base: number
+    updated_at: string
+    source: string
+  }
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -525,6 +547,7 @@ export interface AssistantCleanupGroup {
 export interface AssistantCleanup {
   currency: string
   total: number
+  sampled?: number
   groups: AssistantCleanupGroup[]
 }
 
@@ -560,4 +583,12 @@ export interface AssistantReview {
     actions: AssistantAction[]
   }[]
   guardrail: string
+}
+
+export interface BankLinkStatus {
+  status: 'active' | 'expired' | 'unknown' | 'not_connected' | 'checking'
+  valid_until?: string | null
+  message?: string
+  account_uid?: string
+  account_count?: number
 }

@@ -12,7 +12,8 @@ const FIELDS = ['any', 'description', 'reference']
 const EMPTY_CAT: CategoryIn = { name: '', color: '#B0745C', is_income: false, is_transfer: false }
 const EMPTY_RULE: KeywordRuleIn = { keyword: '', category_name: '', match_field: 'any', priority: 0 }
 
-export default function Categories() {
+export default function Categories({ embedded = false }: { embedded?: boolean }) {
+  const Heading = embedded ? 'h2' : 'h1'
   const [msg, setMsg]               = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   const [catForm, setCatForm]       = useState<CategoryIn>(EMPTY_CAT)
@@ -46,10 +47,10 @@ export default function Categories() {
     try {
       if (editCat) {
         await api.categories.update(editCat.id, catForm)
-        flash('success', 'Category updated.')
+        flash('success', 'Categoria aggiornata.')
       } else {
         await api.categories.create(catForm)
-        flash('success', 'Category created.')
+        flash('success', 'Categoria creata.')
       }
       setCatForm(EMPTY_CAT)
       setEditCat(null)
@@ -62,7 +63,7 @@ export default function Categories() {
     if (!confirm('Delete this category? Transactions assigned to it will have no category.')) return
     try {
       await api.categories.delete(id)
-      flash('success', 'Category deleted.')
+      flash('success', 'Categoria eliminata.')
       reload()
     } catch (e: unknown) { flash('error', e instanceof Error ? e.message : String(e)) }
   }
@@ -72,7 +73,7 @@ export default function Categories() {
     setCatForm({ name: c.name, color: c.color, is_income: c.is_income, is_transfer: c.is_transfer })
   }
 
-  // ── Keyword Rules ────────────────────────────────────────────────────────────
+  // ── Regole di classificazione ────────────────────────────────────────────────────────────
 
   async function saveRule() {
     if (!ruleForm.keyword.trim() || !ruleForm.category_name) return
@@ -80,10 +81,10 @@ export default function Categories() {
     try {
       if (editRule) {
         await api.categories.rules.update(editRule.id, ruleForm)
-        flash('success', 'Rule updated.')
+        flash('success', 'Regola aggiornata.')
       } else {
         await api.categories.rules.create(ruleForm)
-        flash('success', 'Rule created.')
+        flash('success', 'Regola creata.')
       }
       setRuleForm({ ...EMPTY_RULE, category_name: ruleForm.category_name })
       setEditRule(null)
@@ -95,7 +96,7 @@ export default function Categories() {
   async function deleteRule(id: number) {
     try {
       await api.categories.rules.delete(id)
-      flash('success', 'Rule deleted.')
+      flash('success', 'Regola eliminata.')
       reload()
     } catch (e: unknown) { flash('error', e instanceof Error ? e.message : String(e)) }
   }
@@ -109,7 +110,7 @@ export default function Categories() {
     setReapplying(true)
     try {
       const res = await api.categories.rules.reapply()
-      flash('success', `Re-applied rules: ${res.updated} transactions updated.`)
+      flash('success', `Applied matching rules: ${res.updated} transactions changed. Unmatched categories were preserved.`)
     } catch (e: unknown) { flash('error', e instanceof Error ? e.message : String(e)) }
     finally { setReapplying(false) }
   }
@@ -137,25 +138,22 @@ export default function Categories() {
 
   return (
     <div>
-      <div className="page-header">
-        <h1>Categories</h1>
-        <p>Manage expense categories and keyword auto-classification rules</p>
-      </div>
+      {!embedded && <div className="page-header"><Heading>Categorie e regole</Heading><p>Organizza le categorie e automatizza la classificazione dei movimenti</p></div>}
 
-      {error && <Alert type="error">Couldn't load categories: {error}</Alert>}
+      {error && <Alert type="error">Impossibile caricare le categorie: {error}</Alert>}
       {msg && <Alert type={msg.type} onClose={() => setMsg(null)}>{msg.text}</Alert>}
 
       {/* ── Category list + form ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '1.5rem', marginBottom: '2rem' }}>
+      <div className="category-workspace">
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-            <div className="section-title" style={{ margin: 0 }}>Categories</div>
-            <button className="btn btn-secondary btn-sm" onClick={resetColors}>Reset colours</button>
+            <div className="section-title" style={{ margin: 0 }}>Categorie</div>
+            <button className="btn btn-secondary btn-sm" onClick={resetColors}>Ripristina colori</button>
           </div>
           <div className="table-wrap">
             <table>
               <thead>
-                <tr><th>Name</th><th>Type</th><th></th></tr>
+                <tr><th>Nome</th><th>Tipo</th><th></th></tr>
               </thead>
               <tbody>
                 {categories.map(c => (
@@ -167,14 +165,14 @@ export default function Categories() {
                       </span>
                     </td>
                     <td>
-                      {c.is_income && <span className="badge" style={{ background: 'rgba(16,217,142,0.15)', color: '#10d98e', marginRight: 4 }}>Income</span>}
-                      {c.is_transfer && <span className="badge" style={{ background: 'rgba(148,163,184,0.15)', color: '#94a3b8' }}>Transfer</span>}
-                      {!c.is_income && !c.is_transfer && <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>Expense</span>}
+                      {c.is_income && <span className="badge" style={{ background: 'rgba(16,217,142,0.15)', color: '#10d98e', marginRight: 4 }}>Entrata</span>}
+                      {c.is_transfer && <span className="badge" style={{ background: 'rgba(148,163,184,0.15)', color: '#94a3b8' }}>Trasferimento</span>}
+                      {!c.is_income && !c.is_transfer && <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>Spesa</span>}
                     </td>
                     <td>
                       <div style={{ display: 'flex', gap: 4 }}>
-                        <button className="btn btn-secondary btn-sm" onClick={() => startEditCat(c)}>Edit</button>
-                        <button className="btn btn-danger btn-sm" onClick={() => deleteCategory(c.id)}>Delete</button>
+                        <button className="btn btn-secondary btn-sm" onClick={() => startEditCat(c)}>Modifica</button>
+                        <button className="btn btn-danger btn-sm" onClick={() => deleteCategory(c.id)}>Elimina</button>
                       </div>
                     </td>
                   </tr>
@@ -186,22 +184,24 @@ export default function Categories() {
 
         <div className="card" style={{ alignSelf: 'start' }}>
           <div className="section-title" style={{ marginBottom: '0.75rem' }}>
-            {editCat ? 'Edit Category' : 'New Category'}
+            {editCat ? 'Modifica categoria' : 'Nuova categoria'}
           </div>
           <div className="form-group">
-            <label>Name</label>
+            <label>Nome</label>
             <input value={catForm.name} onChange={e => setCatForm(f => ({ ...f, name: e.target.value }))} />
           </div>
           <div className="form-group">
-            <label>Color</label>
+            <label>Colore</label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
               {COLORS.map(col => (
                 <button
                   key={col}
+                  aria-label={`Colore ${col}`}
+                  aria-pressed={catForm.color === col}
                   onClick={() => setCatForm(f => ({ ...f, color: col }))}
                   style={{
                     width: 24, height: 24, borderRadius: '50%', background: col, border: 'none', cursor: 'pointer',
-                    outline: catForm.color === col ? `2px solid white` : 'none',
+                    outline: catForm.color === col ? '2px solid var(--ink)' : undefined,
                     outlineOffset: 2,
                   }}
                 />
@@ -220,35 +220,35 @@ export default function Categories() {
           </div>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
             <button className="btn btn-primary btn-sm" onClick={saveCategory} disabled={saving}>
-              {editCat ? 'Update' : 'Create'}
+              {editCat ? 'Aggiorna' : 'Crea'}
             </button>
-            {editCat && <button className="btn btn-secondary btn-sm" onClick={() => { setEditCat(null); setCatForm(EMPTY_CAT) }}>Cancel</button>}
+            {editCat && <button className="btn btn-secondary btn-sm" onClick={() => { setEditCat(null); setCatForm(EMPTY_CAT) }}>Annulla</button>}
           </div>
         </div>
       </div>
 
-      {/* ── Keyword rules ── */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-        <div className="section-title" style={{ margin: 0 }}>Keyword Rules</div>
+      {/* ── Regole di classificazione ── */}
+      <div className="category-rule-toolbar">
+        <div className="section-title" style={{ margin: 0 }}>Regole di classificazione</div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           <button className="btn btn-secondary btn-sm" onClick={seedDefaults} disabled={seeding}>
-            {seeding ? 'Adding…' : '✦ Seed smart defaults'}
+            {seeding ? 'Aggiunta…' : '✦ Aggiungi regole suggerite'}
           </button>
           <button className="btn btn-secondary btn-sm" onClick={reapply} disabled={reapplying}>
-            {reapplying ? 'Re-applying…' : '↺ Re-apply to all transactions'}
+            {reapplying ? 'Applicazione…' : '↺ Applica ai movimenti'}
           </button>
         </div>
       </div>
       <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
-        When a transaction's description or reference contains the keyword (case-insensitive), it is assigned to the category.
-        Higher priority rules win.
+        Se la descrizione o il riferimento contiene la parola chiave, il movimento viene assegnato alla categoria. Maiuscole e minuscole non fanno differenza.
+        Le regole con priorità maggiore prevalgono. Gli altri movimenti mantengono la categoria attuale.
       </p>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '1.5rem' }}>
+      <div className="category-workspace">
         <div className="table-wrap">
           <table>
             <thead>
-              <tr><th>Keyword</th><th>Category</th><th>Field</th><th>Priority</th><th></th></tr>
+              <tr><th>Parola chiave</th><th>Categoria</th><th>Campo</th><th>Priorità</th><th></th></tr>
             </thead>
             <tbody>
               {rules.map(r => (
@@ -264,14 +264,14 @@ export default function Categories() {
                   <td style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>{r.priority}</td>
                   <td>
                     <div style={{ display: 'flex', gap: 4 }}>
-                      <button className="btn btn-secondary btn-sm" onClick={() => startEditRule(r)}>Edit</button>
-                      <button className="btn btn-danger btn-sm" onClick={() => deleteRule(r.id)}>Delete</button>
+                      <button className="btn btn-secondary btn-sm" onClick={() => startEditRule(r)}>Modifica</button>
+                      <button className="btn btn-danger btn-sm" onClick={() => deleteRule(r.id)}>Elimina</button>
                     </div>
                   </td>
                 </tr>
               ))}
               {!rules.length && (
-                <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '1.5rem' }}>No rules yet</td></tr>
+                <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '1.5rem' }}>Nessuna regola</td></tr>
               )}
             </tbody>
           </table>
@@ -279,18 +279,18 @@ export default function Categories() {
 
         <div className="card" style={{ alignSelf: 'start' }}>
           <div className="section-title" style={{ marginBottom: '0.75rem' }}>
-            {editRule ? 'Edit Rule' : 'New Rule'}
+            {editRule ? 'Modifica regola' : 'Nuova regola'}
           </div>
           <div className="form-group">
-            <label>Keyword</label>
+            <label>Parola chiave</label>
             <input
               value={ruleForm.keyword}
               onChange={e => setRuleForm(f => ({ ...f, keyword: e.target.value }))}
-              placeholder="e.g. amazon"
+              placeholder="Es. amazon"
             />
           </div>
           <div className="form-group">
-            <label>Category</label>
+            <label>Categoria</label>
             <select value={ruleForm.category_name} onChange={e => setRuleForm(f => ({ ...f, category_name: e.target.value }))}>
               {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
             </select>
@@ -311,9 +311,9 @@ export default function Categories() {
           </div>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
             <button className="btn btn-primary btn-sm" onClick={saveRule} disabled={saving}>
-              {editRule ? 'Update' : 'Create'}
+              {editRule ? 'Aggiorna' : 'Crea'}
             </button>
-            {editRule && <button className="btn btn-secondary btn-sm" onClick={() => { setEditRule(null); setRuleForm(EMPTY_RULE) }}>Cancel</button>}
+            {editRule && <button className="btn btn-secondary btn-sm" onClick={() => { setEditRule(null); setRuleForm(EMPTY_RULE) }}>Annulla</button>}
           </div>
         </div>
       </div>

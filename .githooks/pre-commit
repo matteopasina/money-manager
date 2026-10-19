@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+# Local evidence and credentials must never enter a commit, even with git add -f.
+if git diff --cached --name-only --diff-filter=ACMR | grep -Eiq '(^|/)(\.env([.]|$)|[^/]*[.](db|sqlite|sqlite3|key|pem|p12|pfx)([.-]|$))|^docs/(audits|verification)/'; then
+  echo 'Commit blocked: staged credentials, databases or private review evidence.' >&2
+  exit 1
+fi
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo 'Commit blocked: install gitleaks before committing (brew install gitleaks).' >&2
+  exit 1
+fi
+gitleaks git --staged --no-banner --redact

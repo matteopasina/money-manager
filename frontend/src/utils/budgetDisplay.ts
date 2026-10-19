@@ -13,5 +13,5 @@ export function budgetBarWidth(pct: number | null): string {
 
 /** Display label for a budget's category (the total budget has a reserved name). */
 export function budgetLabel(categoryName: string): string {
-  return categoryName === TOTAL_BUDGET ? 'All spending' : categoryName
+  return categoryName === TOTAL_BUDGET ? 'Tutte le spese' : categoryName
 }

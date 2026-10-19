@@ -1,0 +1,19 @@
+#!/bin/sh
+set -eu
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo 'Push blocked: install gitleaks first (brew install gitleaks).' >&2
+  exit 1
+fi
+# Inspect every commit being published, including intermediate changes.
+while read -r local_ref local_sha remote_ref remote_sha; do
+  case "$local_sha" in 0000000000000000000000000000000000000000) continue ;; esac
+  case "$remote_sha" in
+    0000000000000000000000000000000000000000) range="$local_sha" ;;
+    *) range="$remote_sha..$local_sha" ;;
+  esac
+  if git log --format= --name-only "$range" | grep -Eiq '(^|/)(\.env([.]|$)|[^/]*[.](db|sqlite|sqlite3|key|pem|p12|pfx)([.-]|$))|^docs/(audits|verification)/'; then
+    echo 'Push blocked: outgoing commits contain credentials, databases or private review evidence.' >&2
+    exit 1
+  fi
+  gitleaks git --no-banner --redact --log-opts="$range" .
+done

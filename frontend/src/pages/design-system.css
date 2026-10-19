@@ -1,0 +1,30 @@
+.design-system-page { max-width: 1200px; margin: 0 auto; }
+.design-system-page > .btn-link { display: inline-flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-6); text-decoration: none; }
+.design-system-page .page-header { align-items: end; }
+.design-system-page .page-header label { min-width: 150px; }
+.design-system-page h2 { color: var(--ink); font-size: var(--text-lg); margin-bottom: var(--space-3); }
+.design-system-page h3 { color: var(--ink); font-size: var(--text-lg); margin-bottom: var(--space-4); }
+.design-system-page p { line-height: var(--leading-body); max-width: 80ch; }
+.ds-section { margin-bottom: var(--space-6); }
+.ds-section > p { color: var(--ink-faint); margin-bottom: var(--space-6); }
+.ds-kicker { display: block; font-size: var(--text-xs); color: var(--ink-faint); margin-bottom: var(--space-2); }
+.ds-theme-grid, .ds-type-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-6); }
+.ds-theme-panel { background: var(--bg); color: var(--ink); padding: var(--space-6); border: 1px solid var(--border); border-radius: var(--radius-card); }
+.ds-swatches { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); }
+.ds-swatch { height: 48px; border-radius: var(--radius-input); border: 1px solid var(--border); margin-bottom: var(--space-2); }
+.ds-swatches strong { display: block; font-size: var(--text-xs); font-weight: var(--weight-semibold); }
+.design-system-page code { display: block; color: var(--ink-faint); font-size: 11px; margin-top: var(--space-1); overflow-wrap: anywhere; }
+.ds-display { font-size: var(--text-display); font-family: var(--font-data); font-variant-numeric: tabular-nums; color: var(--ink); font-weight: var(--weight-bold); letter-spacing: -0.035em; margin-bottom: var(--space-6); }
+.ds-title { color: var(--ink); font-size: var(--text-title); font-weight: var(--weight-bold); margin-bottom: var(--space-6); }
+.ds-type-notes > p { margin-bottom: var(--space-4); }
+.ds-number-row { display: flex; justify-content: space-between; gap: var(--space-4); border-top: 1px solid var(--border); padding: var(--space-3) 0; }
+.ds-number-row strong { font-variant-numeric: tabular-nums; color: var(--ink); }
+.ds-actions { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; margin-top: var(--space-6); }
+.ds-feedback, .ds-helper { font-size: var(--text-xs); color: var(--ink-faint); margin: var(--space-3) 0 var(--space-6); }
+.ds-error { font-size: var(--text-xs); color: var(--loss); margin-top: var(--space-2); }
+.ds-spacing { display: flex; align-items: end; gap: var(--space-6); flex-wrap: wrap; }
+.ds-spacing span { display: block; background: var(--accent); border-radius: var(--space-1); }
+.ds-rules { padding-left: var(--space-5); line-height: 1.8; }
+@media (max-width: 1000px) { .ds-theme-grid, .ds-type-grid { grid-template-columns: minmax(0, 1fr); } }
+
+.ds-display, .ds-title { font-family: var(--font-display); }

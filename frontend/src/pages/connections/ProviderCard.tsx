@@ -8,6 +8,7 @@ interface Props {
   name: string
   description: string
   connected: boolean
+  statusLabel?: string
   guideSteps?: GuideStep[]
   guideOpen?: boolean
   onToggleGuide?: () => void
@@ -15,7 +16,7 @@ interface Props {
 }
 
 export default function ProviderCard({
-  logo, name, description, connected, guideSteps, guideOpen, onToggleGuide, children,
+  logo, name, description, connected, statusLabel, guideSteps, guideOpen, onToggleGuide, children,
 }: Props) {
   return (
     <div className="card">
@@ -23,7 +24,7 @@ export default function ProviderCard({
         <div style={{ flexShrink: 0 }}>{logo}</div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--ink)' }}>{name}</div>
-          <div style={{ fontSize: '11.5px', color: 'var(--ink-faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <div style={{ fontSize: '11.5px', color: 'var(--ink-faint)', overflowWrap: 'anywhere' }}>
             {description}
           </div>
         </div>
@@ -35,7 +36,7 @@ export default function ProviderCard({
             flexShrink: 0,
           }}
         >
-          {connected ? 'Connected' : 'Not connected'}
+          {statusLabel ?? (connected ? 'Connected' : 'Not connected')}
         </span>
       </div>
 

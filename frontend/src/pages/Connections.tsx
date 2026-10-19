@@ -13,7 +13,8 @@ import { initialAccountId } from './connections/utils'
 type Msg = { type: 'success' | 'error'; text: string }
 type EbAccount = { uid: string; name: string; currency: string }
 
-export default function Connections() {
+export default function Connections({ embedded = false }: { embedded?: boolean }) {
+  const Heading = embedded ? 'h2' : 'h1'
   const [loading, setLoading]     = useState(true)
   const [accounts, setAccounts]   = useState<Account[]>([])
   const [settings, setSettings]   = useState<Record<string, string>>({})
@@ -21,6 +22,7 @@ export default function Connections() {
 
   // Auto-sync state
   const [syncStatus, setSyncStatus]   = useState<SyncStatus | null>(null)
+  const [syncError, setSyncError] = useState<string | null>(null)
   const [syncingNow, setSyncingNow]   = useState(false)
 
   // Enable Banking credentials — shared between Revolut and BBVA, which both
@@ -40,7 +42,7 @@ export default function Connections() {
     Promise.all([
       api.settings.all(),
       api.accounts.list(),
-      api.sync.status().catch(() => null),
+      api.sync.status().catch((e: unknown) => { setSyncError(e instanceof Error ? e.message : String(e)); return null }),
     ]).then(([s, accs, sync]) => {
       setAccounts(accs)
       setSettings(s)
@@ -58,12 +60,20 @@ export default function Connections() {
   // ?code=...&state=<provider>. Both providers share this handler.
   const exchangedCode = useRef(false)
   useEffect(() => {
+    if (loading) return
     const params = new URLSearchParams(window.location.search)
     const code = params.get('code')
     const state = params.get('state')
     // Guard against StrictMode double-invoke: the auth code is single-use, so a
     // second exchange fails with WRONG_SESSION_STATUS and would show a false error.
-    if (!code || exchangedCode.current) return
+    if (exchangedCode.current) return
+    if (params.has('error') && (state === 'revolut' || state === 'bbva')) {
+      exchangedCode.current = true
+      setMsg({ type: 'error', text: `Bank authorisation failed: ${params.get('error_description') || params.get('error')}` })
+      window.history.replaceState(null, '', window.location.pathname)
+      return
+    }
+    if (!code) return
     if (state !== 'revolut' && state !== 'bbva') return
     exchangedCode.current = true
 
@@ -78,7 +88,16 @@ export default function Connections() {
     }).finally(() => {
       window.history.replaceState(null, '', window.location.pathname)
     })
-  }, [])
+  }, [loading])
+
+  async function refreshSyncStatus() {
+    try {
+      setSyncStatus(await api.sync.status())
+      setSyncError(null)
+    } catch (e: unknown) {
+      setSyncError(e instanceof Error ? e.message : String(e))
+    }
+  }
 
   async function updateSyncSettings(enabled: boolean, intervalHours: number) {
     // Optimistic update; the scheduler reads these live on its next tick
@@ -96,6 +115,7 @@ export default function Connections() {
     try {
       const res = await api.sync.runNow()
       setSyncStatus(res)
+      setSyncError(null)
       const ran    = (res.results ?? []).filter(r => r.result === 'success').length
       const failed = (res.results ?? []).filter(r => r.result === 'error').length
       setMsg(failed > 0
@@ -130,8 +150,8 @@ export default function Connections() {
     <div>
       <div className="page-header">
         <div>
-          <h1>Connections</h1>
-          <p>Connect external accounts to import data automatically — set up once, then sync anytime</p>
+          <Heading>Connessioni</Heading>
+          <p>Collega i conti per importare i dati e gestisci la sincronizzazione automatica.</p>
         </div>
       </div>
 
@@ -139,12 +159,14 @@ export default function Connections() {
 
       <div style={{ maxWidth: 680, display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
 
+        {syncError && <Alert type="error">Impossibile caricare lo stato della sincronizzazione: {syncError} <button className="btn btn-secondary btn-sm" onClick={refreshSyncStatus}>Riprova</button></Alert>}
         {syncStatus && (
           <SyncStatusCard
             syncStatus={syncStatus}
             syncingNow={syncingNow}
             onUpdateSettings={updateSyncSettings}
             onSyncNow={syncNow}
+            onRefresh={refreshSyncStatus}
           />
         )}
 

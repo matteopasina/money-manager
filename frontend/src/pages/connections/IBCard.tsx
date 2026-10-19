@@ -63,7 +63,8 @@ export default function IBCard({ accounts, initial, onMsg }: Props) {
       logo={<IBLogo />}
       name="Interactive Brokers"
       description="Import trades, cash transactions, dividends, and daily portfolio value via Flex Query."
-      connected={configured}
+      connected={false}
+      statusLabel={configured ? 'Configured' : 'Not configured'}
       guideOpen={guideOpen}
       onToggleGuide={() => setGuideOpen(o => !o)}
       guideSteps={IB_GUIDE_STEPS}

@@ -12,6 +12,8 @@ from typing import Any
 
 import database as db
 import domain
+from categoriser import matching_category
+from budget_math import shift_month as _month_shift, budget_status
 
 TOTAL_BUDGET = "__total__"
 UNCATEGORIZED = {None, "", "Other"}
@@ -38,12 +40,6 @@ def _is_uncategorized(value: Any) -> bool:
     return _is_missing(value) or value in UNCATEGORIZED
 
 
-def _month_shift(month: str, offset: int) -> str:
-    y, m = int(month[:4]), int(month[5:7])
-    total = y * 12 + (m - 1) + offset
-    return f"{total // 12:04d}-{total % 12 + 1:02d}"
-
-
 def _merchant_key(description: str) -> str:
     text = description.lower()
     text = re.sub(r"\b\d{2,}\b", " ", text)
@@ -68,57 +64,58 @@ def _evidence_row(row) -> dict[str, Any]:
     }
 
 
-def _rule_category_for(text: str) -> str | None:
-    haystack = text.lower()
-    for rule in db.get_keyword_rules():
-        if rule.keyword.lower() in haystack:
-            return rule.category_name
-    return None
-
-
-def _historical_category_for(merchant: str) -> str | None:
-    counts: Counter[str] = Counter()
-    tx = db.get_transactions_df()
-    if tx.empty:
-        return None
+def _historical_categories(tx) -> dict[str, str]:
+    # Build once per cleanup request, instead of reloading and rescanning all
+    # transactions for each uncategorized merchant group.
+    counts = defaultdict(Counter)
     for _, row in tx.iterrows():
-        cat = row["category"]
-        if _is_uncategorized(cat):
-            continue
-        if _merchant_key(str(row["description"])) == merchant:
-            counts[str(cat)] += 1
-    return counts.most_common(1)[0][0] if counts else None
+        if not _is_uncategorized(row["category"]):
+            counts[str(row["description"]).lower().strip()][str(row["category"])] += 1
+    return {merchant: next(iter(categories)) for merchant, categories in counts.items() if len(categories) == 1}
+
+
+def _specific_description(description: str) -> bool:
+    # Bank labels identify an operation type, not the recipient or its purpose.
+    return bool(description.strip()) and "//" not in description and not re.search(
+        r"\b(bonifico|transferencia|transfer|top.up|giroconto|ordenes|pagos|cobros)\b",
+        description, re.IGNORECASE,
+    )
 
 
 def find_uncategorized_transactions(limit: int = 80) -> dict[str, Any]:
     currency = db.get_base_currency()
     tx = db.get_transactions_df()
     if tx.empty:
-        return {"currency": currency, "total": 0, "groups": []}
+        return {"currency": currency, "total": 0, "sampled": 0, "groups": []}
 
-    rows = []
-    for _, row in tx.iterrows():
-        if _is_uncategorized(row["category"]):
-            rows.append(row)
-        if len(rows) >= limit:
-            break
+    unknown = tx[tx["category"].map(_is_uncategorized)]
+    rows = [row for _, row in unknown.head(max(0, limit)).iterrows()]
 
     groups_by_key: dict[str, list[Any]] = defaultdict(list)
     for row in rows:
         groups_by_key[_merchant_key(str(row["description"]))].append(row)
 
+    history = _historical_categories(tx)
+    rules = db.get_keyword_rules()
     groups = []
     for merchant, group_rows in groups_by_key.items():
         total = round(sum(abs(domain.base_amount(r)) for r in group_rows if domain.base_amount(r) < 0), 2)
         sample = str(group_rows[0]["description"])
-        suggested_category = _rule_category_for(sample) or _historical_category_for(merchant)
+        candidates = {
+            matching_category(str(r["description"]), str(r["reference"] or ""), rules)
+            or (history.get(str(r["description"]).lower().strip()) if _specific_description(str(r["description"])) else None)
+            for r in group_rows
+        }
+        suggested_category = next(iter(candidates)) if len(candidates) == 1 else None
         actions = []
-        if suggested_category:
+        descriptions = {str(r["description"]).lower().strip() for r in group_rows}
+        keyword = sample.lower().strip()
+        if suggested_category and len(descriptions) == 1 and _specific_description(sample):
             actions.append({
                 "type": "create_keyword_rule",
                 "label": f"Create rule: {merchant} -> {suggested_category}",
                 "payload": {
-                    "keyword": merchant,
+                    "keyword": keyword,
                     "category_name": suggested_category,
                     "match_field": "description",
                     "priority": 0,
@@ -134,17 +131,17 @@ def find_uncategorized_transactions(limit: int = 80) -> dict[str, Any]:
         })
 
     groups.sort(key=lambda g: (g["count"], g["total_spend"]), reverse=True)
-    return {"currency": currency, "total": len(rows), "groups": groups}
+    return {"currency": currency, "total": len(unknown), "sampled": len(rows), "groups": groups}
 
 
 def suggest_keyword_rules(limit: int = 12) -> dict[str, Any]:
     cleanup = find_uncategorized_transactions(limit=200)
     suggestions = []
     for group in cleanup["groups"]:
-        if not group["suggested_category"]:
+        if not group["suggested_category"] or not group["actions"]:
             continue
         suggestions.append({
-            "keyword": group["merchant"],
+            "keyword": group["actions"][0]["payload"]["keyword"],
             "category_name": group["suggested_category"],
             "match_field": "description",
             "priority": 0,
@@ -162,20 +159,20 @@ def budget_risk_report(month: str | None = None) -> dict[str, Any]:
     currency = db.get_base_currency()
     budgets = [b for b in db.get_budgets() if b.active and b.category_name != TOTAL_BUDGET]
     spend = db.get_monthly_spend_by_category(
-        start_month=month,
+        start_month=min((b.start_month for b in budgets), default=month),
         end_month=month,
         categories=[b.category_name for b in budgets],
     )
     risks = []
     for budget in budgets:
-        spent = round(float(spend.get(budget.category_name, {}).get(month, 0)), 2)
-        pct = round(spent / budget.monthly_amount * 100, 1) if budget.monthly_amount > 0 else None
+        status = budget_status(budget, spend.get(budget.category_name, {}), month)
+        spent, pct = status["spent"], status["pct"]
         if pct is not None and pct >= 70:
             risks.append({
                 "category_name": budget.category_name,
                 "spent": spent,
-                "monthly_amount": budget.monthly_amount,
-                "remaining": round(budget.monthly_amount - spent, 2),
+                "monthly_amount": status["effective"],
+                "remaining": status["remaining"],
                 "pct": pct,
                 "severity": "over" if pct >= 100 else "high" if pct >= 85 else "watch",
                 "action": {
@@ -192,7 +189,8 @@ def _latest_transaction_month() -> str:
     tx = db.get_transactions_df()
     if tx.empty:
         return date.today().strftime("%Y-%m")
-    return max(str(d)[:7] for d in tx["date"].tolist())
+    recorded = [str(d)[:7] for d in tx["date"] if str(d) <= date.today().isoformat()]
+    return max(recorded) if recorded else date.today().strftime("%Y-%m")
 
 
 def monthly_review(month: str | None = None) -> dict[str, Any]:
@@ -201,9 +199,8 @@ def monthly_review(month: str | None = None) -> dict[str, Any]:
     currency = db.get_base_currency()
     categories = db.get_categories()
     excluded = {c.name for c in categories if c.is_transfer}
-    income_cats = {c.name for c in categories if c.is_income}
 
-    tx = db.get_transactions_df(start=prev_month + "-01")
+    tx = db.get_transactions_df(start=prev_month + "-01", end=date.today().isoformat())
     rows = [] if tx.empty else [row for _, row in tx.iterrows()]
 
     def tx_month(row) -> str:

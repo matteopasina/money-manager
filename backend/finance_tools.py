@@ -19,6 +19,7 @@ def get_net_worth_summary(inputs: dict[str, Any] | None = None) -> str:
 
     base_currency = db.get_base_currency()
     df = db.get_balances_df()
+    df = df[df["date"] <= datetime.today().strftime("%Y-%m-%d")]
     if df.empty:
         return json.dumps({"error": "No balance data"})
     df["date"] = pd.to_datetime(df["date"])
@@ -45,6 +46,7 @@ def get_account_balances(inputs: dict[str, Any] | None = None) -> str:
 
     base_currency = db.get_base_currency()
     df = db.get_balances_df()
+    df = df[df["date"] <= datetime.today().strftime("%Y-%m-%d")]
     if df.empty:
         return json.dumps({"accounts": []})
     df["date"] = pd.to_datetime(df["date"])
@@ -68,7 +70,7 @@ def get_spending_by_category(inputs: dict[str, Any] | None = None) -> str:
     if expenses.empty:
         return json.dumps({"categories": [], "total": 0, "period_months": months})
     total = float(expenses["amount_base"].sum())
-    by_cat = expenses.groupby("category")["amount_base"].sum().sort_values(ascending=False)
+    by_cat = expenses.assign(category=expenses["category"].fillna("Uncategorized").replace("", "Uncategorized")).groupby("category")["amount_base"].sum().sort_values(ascending=False)
     return json.dumps({"categories": [
         {"category": c, "total": round(float(a), 2), "pct": round(float(a) / total * 100, 1)}
         for c, a in by_cat.items()
@@ -130,19 +132,22 @@ def get_net_worth_trend(inputs: dict[str, Any] | None = None) -> str:
     base_currency = db.get_base_currency()
     months = int(inputs.get("months", 12))
     df = db.get_balances_df()
+    df = df[df["date"] <= datetime.today().strftime("%Y-%m-%d")]
     if df.empty:
         return json.dumps({"trend": []})
-    df["date"] = pd.to_datetime(df["date"])
-    cutoff = datetime.today() - relativedelta(months=months)
-    df = df[df["date"] >= cutoff]
-    df["month"] = df["date"].dt.to_period("M").astype(str)
-    trend = [
-        {"month": m, "net_worth": round(float(
-            df[df["month"] == m].sort_values("date").groupby("account_id").last()["amount_base"].sum()
-        ), 2)}
-        for m in sorted(df["month"].unique())
-    ]
-    return json.dumps({"trend": trend, "currency": base_currency})
+    df = df[df["date"] <= datetime.today().strftime("%Y-%m-%d")].copy()
+    if df.empty:
+        return json.dumps({"trend": [], "currency": base_currency})
+    df = df.sort_values("date")
+    df["month"] = pd.to_datetime(df["date"]).dt.to_period("M")
+    # Carry each account's most recent *recorded* balance through other accounts'
+    # update months, including observations before the requested lookback.
+    monthly = df.pivot_table(index="month", columns="account_id", values="amount_base", aggfunc="last").ffill().fillna(0).sum(axis=1)
+    cutoff = (datetime.today() - relativedelta(months=months)).strftime("%Y-%m")
+    return json.dumps({"trend": [
+        {"month": str(month), "net_worth": round(float(amount), 2)}
+        for month, amount in monthly.items() if str(month) >= cutoff
+    ], "currency": base_currency})
 
 
 def get_schema(inputs: dict[str, Any] | None = None) -> str:

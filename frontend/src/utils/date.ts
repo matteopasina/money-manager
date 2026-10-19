@@ -19,13 +19,13 @@ export function parseLocalDate(dateOnly: string): Date {
 }
 
 export function formatDateLabel(dateOnly: string, opts: { withYear?: boolean } = {}): string {
-  return parseLocalDate(dateOnly).toLocaleDateString('en-GB', {
+  return parseLocalDate(dateOnly).toLocaleDateString('it-IT', {
     day: 'numeric', month: 'short', ...(opts.withYear ? { year: 'numeric' as const } : {}),
   })
 }
 
 export function formatMonthLabel(month: string, opts: { withYear?: boolean } = {}): string {
-  return parseLocalDate(month + '-01').toLocaleDateString('en-GB', {
+  return parseLocalDate(month + '-01').toLocaleDateString('it-IT', {
     month: 'long', ...(opts.withYear ? { year: 'numeric' as const } : {}),
   })
 }

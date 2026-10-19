@@ -89,9 +89,7 @@ def _run_revolut() -> str:
     from routers import revolut
     acc = _int_setting("revolut_account_id")
     # days must be passed explicitly: direct calls skip FastAPI's Query-default resolution
-    t = revolut.sync_transactions(account_id=acc, days=90)
-    b = revolut.sync_balances(account_id=acc)
-    return f"Transactions: {t['inserted']} new. Balance: {b['inserted']} snapshot."
+    return _run_bank(revolut, acc)
 
 
 def _bbva_configured() -> bool:
@@ -103,9 +101,35 @@ def _bbva_configured() -> bool:
 def _run_bbva() -> str:
     from routers import bbva
     acc = _int_setting("bbva_account_id")
-    t = bbva.sync_transactions(account_id=acc, days=90)
-    b = bbva.sync_balances(account_id=acc)
-    return f"Transactions: {t['inserted']} new. Balance: {b['inserted']} snapshot."
+    return _run_bank(bbva, acc)
+
+
+def _run_bank(bank, account_id: int) -> str:
+    # A transactions failure must not prevent a fresh balance snapshot.
+    from fastapi import HTTPException
+    messages, failures = [], []
+    for label, run in (
+        ("Transactions", lambda: bank.sync_transactions(account_id=account_id, days=90)),
+        ("Balance", lambda: bank.sync_balances(account_id=account_id)),
+    ):
+        try:
+            result = run()
+            messages.append(f"{label}: {result['inserted']} imported.")
+        except Exception as exc:
+            failures.append(f"{label}: {getattr(exc, 'detail', None) or str(exc)}")
+    if failures:
+        raise HTTPException(502, " ".join(messages + failures))
+    return " ".join(messages)
+
+
+def _msft_configured():
+    import stock_positions
+    return stock_positions.configured()
+
+
+def _run_msft():
+    import stock_positions
+    return stock_positions.sync()
 
 
 INTEGRATIONS = [
@@ -114,6 +138,7 @@ INTEGRATIONS = [
     ("binance", "Binance",             _binance_configured, _run_binance),
     ("revolut", "Revolut",             _revolut_configured, _run_revolut),
     ("bbva",    "BBVA",                _bbva_configured,    _run_bbva),
+    ("msft",    "Microsoft shares",    _msft_configured,    _run_msft),
 ]
 
 

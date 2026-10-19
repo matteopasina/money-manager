@@ -7,10 +7,12 @@ interface AlertProps {
 
 export default function Alert({ type, children, onClose, style }: AlertProps) {
   return (
-    <div className={`alert alert-${type}`} style={{ marginBottom: '1rem', ...style }}>
+    <div role={type === 'error' ? 'alert' : 'status'} className={`alert alert-${type}`} style={{ marginBottom: '1rem', ...style }}>
       {children}
       {onClose && (
         <button
+          type="button"
+          aria-label="Dismiss alert"
           onClick={onClose}
           style={{ float: 'right', background: 'none', border: 'none', cursor: 'pointer', color: 'inherit' }}
         >

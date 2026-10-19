@@ -1,0 +1,34 @@
+import { useState } from 'react'
+import { ArrowLeft, Plus, Check } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { useTheme } from '../useTheme'
+import Alert from '../components/Alert'
+import './design-system.css'
+
+const colors = [
+  ['Canvas', '--bg'], ['Surface', '--bg-card'], ['Inset', '--bg-inset'],
+  ['Primary text', '--ink'], ['Secondary text', '--ink-faint'], ['Accent', '--accent'],
+  ['Link', '--link'], ['Positive', '--gain'], ['Negative', '--loss'],
+]
+
+export default function DesignSystem() {
+  const { mode, setMode } = useTheme()
+  const [saved, setSaved] = useState(false)
+  return <div className="design-system-page">
+    <Link className="btn-link" to="/dashboard"><ArrowLeft size={14} aria-hidden="true" /> Back to dashboard</Link>
+    <div className="page-header">
+      <div><p className="ds-kicker">FUOCO / Interface foundations</p><h1>A clear view of your money.</h1><p>The living reference for color, type, controls, and financial data.</p></div>
+      <label>Preview theme<select value={mode} onChange={e => setMode(e.target.value as 'light' | 'dark' | 'system')}><option value="light">Light</option><option value="dark">Dark</option><option value="system">System</option></select></label>
+    </div>
+    <section className="card ds-section"><h2>Warm, precise, grounded.</h2><p>Paper surfaces, dark ink, and a restrained gold accent. Color directs attention; numbers tell the story. Use the dark net-worth panel once per page and keep surrounding information quiet.</p></section>
+    <section className="ds-section"><h2>One palette, two themes</h2><p>Semantic tokens keep contrast and meaning consistent across themes.</p><div className="ds-theme-grid">
+      {(['light', 'dark'] as const).map(theme => <div key={theme} data-theme={theme} className="ds-theme-panel"><h3>{theme === 'light' ? 'Light / Paper' : 'Dark / Ink'}</h3><div className="ds-swatches">{colors.map(([label, token]) => <div key={token}><div className="ds-swatch" style={{ background: `var(${token})` }} /><strong>{label}</strong><code>{token}</code></div>)}</div><div className="ds-actions"><button className="btn btn-primary" onClick={() => setMode(theme)}>Use {theme} theme</button><span className="badge">Recorded balance</span></div></div>)}
+    </div></section>
+    <section className="card ds-section"><h2>Typography & financial figures</h2><p>Newsreader for editorial titles and large figures; Hanken Grotesk for controls and data. Use tabular figures, medium labels and deliberate hierarchy.</p><div className="ds-type-grid"><div><span className="ds-kicker">Display / 38–68 px</span><div className="ds-display">€24,680</div><span className="ds-kicker">Page title / 32 px</span><div className="ds-title">Your financial overview</div><span className="ds-kicker">Section / 17 px</span><h3>Where your money went</h3></div><div className="ds-type-notes"><p>Body / 14 px · Line height 1.5</p><p>Supporting text / 12–13 px</p><p>Amounts include their currency. Zero is a recorded value; an em dash means there is no reliable value yet.</p><div className="ds-number-row"><span>Money in</span><strong>+€3,200.00</strong></div><div className="ds-number-row"><span>Spending</span><strong>−€1,186.40</strong></div><div className="ds-number-row"><span>No comparison yet</span><strong>—</strong></div></div></div></section>
+    <section className="card ds-section"><h2>Modular workspace</h2><p>Navigation has six primary destinations plus settings. Sections live in URLs; home cards receive data and callbacks independently of their position.</p><nav className="section-navigation" aria-label="Example sections"><Link className="section-link active" to="/wealth">Vista d’insieme</Link><Link className="section-link" to="/wealth/accounts">Conti e saldi</Link><Link className="section-link" to="/wealth/investments">Investimenti</Link></nav><div className="home-panel"><div className="panel-heading"><h2>Da tenere a fuoco</h2><Link to="/dashboard">Il tuo quadro ↗</Link></div><p>One short list of useful actions. Empty, loading and unavailable data are separate states.</p></div></section>
+    <section className="card ds-section"><h2>Actions & states</h2><p>Name the action. Keep one primary action per task. All controls support visible keyboard focus.</p><div className="ds-actions"><button className="btn btn-primary" onClick={() => setSaved(true)}>{saved ? <Check size={16} aria-hidden="true" /> : <Plus size={16} aria-hidden="true" />}{saved ? 'Example saved' : 'Save example'}</button><button className="btn btn-secondary" onClick={() => setSaved(false)}>Reset example</button><button className="btn btn-danger" onClick={() => setSaved(false)}>Delete example</button><button className="btn btn-primary" disabled>Unavailable</button><button className="btn btn-primary" disabled aria-busy="true">Saving…</button><Link className="btn-link" to="/dashboard">View dashboard →</Link></div><div className="ds-feedback" role="status">{saved ? 'Example saved locally in this preview.' : 'Preview controls only; financial records are unchanged.'}</div></section>
+    <section className="card ds-section"><h2>Fields & feedback</h2><div className="ds-theme-grid"><div><label htmlFor="ds-account">Account name</label><input id="ds-account" placeholder="Everyday account" /><p className="ds-helper">Use a name you will recognize in your transaction list.</p><label htmlFor="ds-amount">Monthly limit</label><input id="ds-amount" defaultValue="0" aria-invalid="true" aria-describedby="ds-error" /><p className="ds-error" id="ds-error">Enter an amount greater than zero.</p></div><div><Alert type="info">No balance snapshots yet. Add one to start tracking your net worth.</Alert><Alert type="success">Your changes were saved.</Alert><Alert type="error">Could not save the category. Your selection is kept; try again.</Alert></div></div></section>
+    <section className="card ds-section"><h2>Spacing & shape</h2><p>A 4 px base scale. Use 8–12 px inside a control, 16–24 px within a card, and 24–32 px between sections. Cards have a 20 px radius; inputs and buttons use 11 px.</p><div className="ds-spacing">{[1,2,3,4,5,6,8,10].map(n => <div key={n}><span style={{ width: `var(--space-${n})`, height: `var(--space-${n})` }} /><code>{n * 4}px</code></div>)}</div></section>
+    <section className="card ds-section"><h2>Data has a contract</h2><ul className="ds-rules"><li>Show the period, currency, and source date beside the figure.</li><li>Exclude transfers from income and spending. Account moves are not new savings.</li><li>Compare the same elapsed period for a month in progress.</li><li>Keep snapshot charts on recorded dates. Do not create daily balance points.</li><li>Pair color with a label or number. Provide readable values alongside charts.</li><li>Show empty, loading, and error states distinctly, with a useful next step.</li></ul></section>
+  </div>
+}

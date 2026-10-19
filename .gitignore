@@ -45,3 +45,29 @@ frontend/node_modules/
 .coverage
 htmlcov/
 *.egg-info/
+
+# Local pre-repair database snapshots (may contain private financial data).
+/finances.db.bak-*
+
+# Local credentials, database copies and financial review evidence.
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.sqlite-*
+*.key
+*.pem
+*.p12
+*.pfx
+.env.*
+/docs/audits/
+/docs/verification/
+/docs/app-review.md
+/docs/connection-sync-fixes-*.md
+/frontend/src/assets/branding/
+*.log
+*.xls
+*.xlsm
+*.ofx
+*.qfx
+*.qif

@@ -3,7 +3,7 @@ def test_assistant_insights_empty(client):
     assert resp.status_code == 200
     data = resp.json()
     assert data["insights"] == []
-    assert data["ai_enabled"] is False
+    assert data["ai_enabled"] is True
 
 
 def test_assistant_insights_returns_fallbacks(client):
@@ -46,6 +46,36 @@ def test_cleanup_groups_uncategorized_with_rule_suggestion(client):
     assert data["total"] == 2
     assert data["groups"][0]["suggested_category"] == "Entertainment"
     assert data["groups"][0]["actions"][0]["type"] == "create_keyword_rule"
+
+
+def test_cleanup_counts_all_unknown_transactions_beyond_sample(client):
+    import database as db
+
+    acc = db.add_account("Checking", "EUR", "liquid").id
+    db.insert_transactions([
+        {"account_id": acc, "date": f"2026-07-0{i}", "description": f"Unknown {i}", "amount": -i, "category": category}
+        for i, category in enumerate(["Other", None, ""], start=1)
+    ])
+
+    data = client.get("/api/assistant/cleanup?limit=1").json()
+    assert data["total"] == 3
+    assert data["sampled"] == 1
+    assert sum(group["count"] for group in data["groups"]) == 1
+
+
+def test_cleanup_does_not_generalize_bank_labels_or_truncated_merchants(client):
+    import database as db
+
+    acc = db.add_account("Checking", "EUR", "liquid").id
+    db.insert_transactions([
+        {"account_id": acc, "date": "2026-07-01", "description": "Bonifico eseguito", "amount": -800, "category": "Investment"},
+        {"account_id": acc, "date": "2026-07-02", "description": "Bonifico eseguito", "amount": -976, "category": "Other"},
+        {"account_id": acc, "date": "2026-07-03", "description": "PAGO CON TARJETA // SPORT SHOP", "amount": -10, "category": "Sport"},
+        {"account_id": acc, "date": "2026-07-04", "description": "PAGO CON TARJETA // DENTIST", "amount": -20, "category": "Other"},
+    ])
+
+    groups = client.get("/api/assistant/cleanup").json()["groups"]
+    assert all(group["suggested_category"] is None and group["actions"] == [] for group in groups)
 
 
 def test_cleanup_serializes_missing_amount_base(client):

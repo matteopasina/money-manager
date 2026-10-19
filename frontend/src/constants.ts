@@ -10,3 +10,5 @@ export const ACCOUNT_TYPE_BADGE: Record<string, { bg: string; color: string }> =
   'real estate': { bg: '#3F7A5522', color: '#2f5a3e' },
   other:         { bg: '#92887322', color: '#6B6253' },
 }
+
+export const ACCOUNT_TYPE_LABELS: Record<string, string> = { liquid: 'Liquidità', stocks: 'Titoli', crypto: 'Criptovalute', pension: 'Pensione', other: 'Altro' }

@@ -44,6 +44,7 @@ def _fallback_insights() -> list[Insight]:
     insights: list[Insight] = []
 
     balances = db.get_balances_df()
+    balances = balances[balances["date"] <= date.today().isoformat()]
     if not balances.empty:
         balances["date"] = pd.to_datetime(balances["date"])
         latest = balances.sort_values("date").groupby("account_id").last().reset_index()
@@ -63,8 +64,8 @@ def _fallback_insights() -> list[Insight]:
     tx = db.get_transactions_df()
     cats = db.get_categories()
     transfer_cats = {c.name for c in cats if c.is_transfer}
-    income_cats = {c.name for c in cats if c.is_income}
     if not tx.empty:
+        tx = tx[tx["date"] <= date.today().isoformat()].copy()
         tx["date_dt"] = pd.to_datetime(tx["date"])
         amount = tx["amount_base"].fillna(tx["amount"])
         tx["base_amount"] = amount
@@ -72,7 +73,7 @@ def _fallback_insights() -> list[Insight]:
         recent = tx[tx["date_dt"] >= start].copy()
         spending = recent[(recent["base_amount"] < 0) & ~recent["category"].fillna("").isin(transfer_cats)]
         if not spending.empty:
-            by_cat = spending.assign(spend=-spending["base_amount"]).groupby("category")["spend"].sum().sort_values(ascending=False)
+            by_cat = spending.assign(spend=-spending["base_amount"]).groupby(tx["category"].fillna("Uncategorized"))["spend"].sum().sort_values(ascending=False)
             top_cat = str(by_cat.index[0] or "Uncategorized")
             top_value = float(by_cat.iloc[0])
             insights.append(Insight(
@@ -99,7 +100,7 @@ def _fallback_insights() -> list[Insight]:
             (current_rows["base_amount"] > 0) & ~current_rows["category"].fillna("").isin(transfer_cats)
         ]["base_amount"].sum())
         current_spend = float(-current_rows[
-            (current_rows["base_amount"] < 0) & ~current_rows["category"].fillna("").isin(transfer_cats | income_cats)
+            (current_rows["base_amount"] < 0) & ~current_rows["category"].fillna("").isin(transfer_cats)
         ]["base_amount"].sum())
         if current_income > 0:
             savings_rate = (current_income - current_spend) / current_income * 100
@@ -111,30 +112,18 @@ def _fallback_insights() -> list[Insight]:
                 action_prompt="Explain this month's cash flow and the biggest levers I can adjust.",
             ))
 
-    budgets = db.get_budgets()
-    if budgets:
-        month = date.today().strftime("%Y-%m")
-        spend_by_cat = db.get_monthly_spend_by_category(
-            start_month=month,
-            end_month=month,
-            categories=[b.category_name for b in budgets if b.category_name != "__total__"],
-        )
-        risky = []
-        for budget in budgets:
-            if not budget.active or budget.category_name == "__total__":
-                continue
-            spent = spend_by_cat.get(budget.category_name, {}).get(month, 0)
-            if budget.monthly_amount > 0 and spent / budget.monthly_amount >= 0.8:
-                risky.append((budget.category_name, spent, budget.monthly_amount))
-        if risky:
-            name, spent, cap = sorted(risky, key=lambda r: r[1] / r[2], reverse=True)[0]
-            insights.append(Insight(
-                title=f"{name} budget is heating up",
-                body=f"{name} is at {_money(spent, currency)} of {_money(cap, currency)} for the month.",
-                severity="warning",
-                action_label="Review budget",
-                action_prompt=f"Review my {name} budget and show the transactions behind it.",
-            ))
+    risks = assistant_tools.budget_risk_report()["risks"]
+    risky = [r for r in risks if r["pct"] >= 80]
+    if risky:
+        risk = max(risky, key=lambda row: row["pct"])
+        name, spent, cap = risk["category_name"], risk["spent"], risk["monthly_amount"]
+        insights.append(Insight(
+            title=f"{name} budget is heating up",
+            body=f"{name} is at {_money(spent, currency)} of {_money(cap, currency)} for the month.",
+            severity="warning",
+            action_label="Review budget",
+            action_prompt=f"Review my {name} budget and show the transactions behind it.",
+        ))
 
     return insights[:5]
 

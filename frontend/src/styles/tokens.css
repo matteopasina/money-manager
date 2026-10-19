@@ -1,0 +1,221 @@
+/* FUOCO design tokens. See docs/design-system.md. */
+/* 1. Primitives: the only raw palette and scale definitions. */
+:root {
+  --color-paper-50: #FBF8F1;
+  --color-paper-100: #FBF8F1;
+  --color-paper-150: #F4EEE2;
+  --color-paper-200: #F4F1E8;
+  --color-paper-250: #F0E6D2;
+  --color-paper-300: #EBE3D2;
+  --color-paper-350: #E7DECC;
+  --color-paper-400: #E2D8C5;
+  --color-ink-950: #100E0A;
+  --color-ink-900: #1B1812;
+  --color-ink-850: #1F1C16;
+  --color-ink-800: #172C26;
+  --color-ink-780: #242019;
+  --color-white: #FFFFFF;
+  --color-ink-750: #2A251D;
+  --color-ink-700: #322C22;
+  --color-ink-650: #332C20;
+  --color-ink-600: #3A3328;
+  --color-ink-500: #544B3D;
+  --color-ink-450: #6B6253;
+  --color-ink-400: #716653;
+  --color-ink-350: #928873;
+  --color-ink-300: #A89D88;
+  --color-ink-250: #A99C82;
+  --color-ink-200: #B5A68B;
+  --color-ink-150: #C9BA9E;
+  --color-ink-100: #D9CFBC;
+  --color-gold-700: #896018;
+  --color-gold-500: #B8842B;
+  --color-gold-300: #D6A857;
+  --color-green-700: #183F36;
+  --color-green-600: #3F7A55;
+  --color-green-400: #6FA887;
+  --color-green-200: #A6CE8B;
+  --color-green-100: #B8DBA1;
+  --color-red-600: #BE4A33;
+  --color-red-400: #D9745A;
+  --color-red-200: #F1AE98;
+  --color-umber-600: #6E5A3E;
+  --color-umber-400: #8C8068;
+  --color-umber-350: #756B58;
+  --color-tan-500: #A88B5C;
+  --color-clay-500: #C97B4A;
+  --font-display: 'Newsreader', Georgia, serif;
+  --color-ember-600: #A94319;
+  --color-ember-400: #ED976D;
+  --color-ember-500: #E76A32;
+  --color-mist-100: #E7EADD;
+  --color-chart-ember: #C45C2A;
+  --color-sage-200: #B9CDB2;
+  --color-sage-600: #63826A;
+  --font-body: 'Hanken Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-data: var(--font-body);
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-lg: 17px;
+  --text-xl: 24px;
+  --text-title: 32px;
+  --text-display: clamp(38px, 4.5vw, 68px);
+  --leading-body: 1.5;
+  --leading-heading: 1.1;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --duration-fast: 120ms;
+  --duration-normal: 200ms;
+  --ease-standard: ease;
+  --control-height: 44px;
+  --control-height-compact: 32px;
+}
+
+/* 2. Semantic roles: theme-aware surfaces, text and status. */
+:root, [data-theme="light"] {
+  /* Canvas & surfaces (warm neutrals) */
+  --bg:           var(--color-paper-200);
+  --bg-card:      var(--color-paper-100);
+  --bg-inset:     var(--color-paper-50);
+  --bg-chip:      var(--color-paper-300);
+  --bg-secondary: var(--color-paper-300);
+  --bg-active:    var(--color-mist-100);
+
+  /* Ink (warm near-black) */
+  --ink:          var(--color-ink-800);
+  --ink-soft:     var(--color-ink-500);
+  --ink-muted:    var(--color-ink-450);
+  --ink-faint:    var(--color-ink-400);
+  --ink-ghost:    var(--color-ink-400);
+
+  /* Hairlines */
+  --border:       var(--color-paper-400);
+  --border-soft:  var(--color-paper-350);
+
+  /* Accent — single signature pop */
+  --accent:       var(--color-ember-500);
+
+  /* Semantic */
+  --gain:         var(--color-green-600);
+  --loss:         var(--color-red-600);
+  --accent-green: var(--color-green-600);
+  --accent-amber: var(--color-gold-500);
+  --danger:       var(--color-red-600);
+
+  /* On-dark (text over the --ink hero card) */
+  --on-ink:        var(--color-paper-150);
+  --on-ink-muted:  var(--color-ink-250);
+  --on-ink-faint:  var(--color-umber-400);
+  --gain-on-ink:   var(--color-green-200);
+  --gain-chip-bg:  rgba(126,168,110,0.18);
+
+  /* Categorical series palette */
+  --series-1: var(--color-chart-ember);
+  --series-2: var(--color-green-600);
+  --series-3: var(--color-umber-600);
+  --series-4: var(--color-tan-500);
+  --series-5: var(--color-clay-500);
+
+  /* Legacy aliases used across the app */
+  --text:         var(--ink-soft);
+  --text-muted:   var(--ink-faint);
+  --text-bright:  var(--ink);
+  --shadow:       none;
+  --shadow-md:    none;
+  --shadow-hero:  0 18px 40px -22px rgba(36,31,24,0.55);
+
+  --radius:        11px;
+  --radius-lg:     20px;
+  --radius-pill:   99px;
+  --radius-card:   20px;
+  --radius-hero:   22px;
+  --radius-tile:   16px;
+  --radius-input:  11px;
+  --radius-logo:   9px;
+}
+
+[data-theme="dark"] {
+  --bg:           var(--color-ink-900);
+  --bg-card:      var(--color-ink-780);
+  --bg-inset:     var(--color-ink-850);
+  --bg-chip:      var(--color-ink-700);
+  --bg-secondary: var(--color-ink-750);
+  --bg-active:    var(--color-ink-650);
+
+  --ink:          var(--color-paper-150);
+  --ink-soft:     var(--color-ink-100);
+  --ink-muted:    var(--color-ink-250);
+  --ink-faint:    var(--color-ink-200);
+  --ink-ghost:    var(--color-ink-200);
+
+  --border:       var(--color-ink-600);
+  --border-soft:  var(--color-ink-700);
+
+  --accent:       var(--color-ember-400);
+  --gain:         var(--color-green-400);
+  --loss:         var(--color-red-400);
+  --accent-green: var(--color-green-400);
+  --accent-amber: var(--color-gold-300);
+  --danger:       var(--color-red-400);
+
+  --on-ink:        var(--color-ink-900);
+  --on-ink-muted:  var(--color-ink-450);
+  --on-ink-faint:  var(--color-ink-500);
+  --gain-on-ink:   var(--color-green-700);
+  --gain-chip-bg:  rgba(111,168,135,0.22);
+
+  --text:         var(--ink-soft);
+  --text-muted:   var(--ink-faint);
+  --text-bright:  var(--ink);
+  --shadow-hero:  0 18px 40px -22px rgba(0,0,0,0.6);
+}
+
+
+:root, [data-theme="light"] { --link: var(--color-ember-600); }
+[data-theme="dark"] { --link: var(--color-ember-400); }
+
+/* 3. Component tokens. Rebound in theme scopes so previews compose correctly. */
+:root, [data-theme] {
+  --button-primary-bg: var(--ink);
+  --button-primary-text: var(--bg-card);
+  --button-secondary-bg: var(--bg-card);
+  --button-secondary-text: var(--ink-soft);
+  --button-danger-bg: var(--color-red-600);
+  --button-danger-text: var(--color-white);
+  --button-radius: var(--radius-input);
+  --card-bg: var(--bg-card);
+  --card-border: var(--border);
+  --card-padding: var(--space-6);
+  --input-bg: var(--bg-card);
+  --input-text: var(--ink-soft);
+  --focus-color: var(--link);
+  --section-gap: var(--space-6);
+  --hero-bg: var(--color-green-700);
+  --hero-text: var(--color-paper-150);
+  --hero-muted: var(--color-ink-150);
+  --hero-gain: var(--color-green-100);
+  --hero-loss: var(--color-red-200);
+  --hero-divider: rgba(244,238,226,0.18);
+  --hero-gain-bg: rgba(126,168,110,0.18);
+  --hero-loss-bg: rgba(217,116,90,0.18);
+  --flow-income-ink: var(--color-green-400);
+  --flow-source: var(--color-paper-300);
+  --flow-spending: var(--color-sage-200);
+  --flow-saving: var(--color-ember-500);
+  --flow-deficit: var(--color-clay-500);
+}
+
+[data-theme="dark"] {
+  --flow-source: var(--color-ink-600);
+  --flow-spending: var(--color-sage-600);
+}

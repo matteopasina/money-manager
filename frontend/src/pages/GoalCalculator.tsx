@@ -25,17 +25,6 @@ export default function GoalCalculator() {
   const navigate = useNavigate()
   const [params, setParams] = useState(DEFAULT_PARAMS)
   const [touched, setTouched] = useState<Record<AutoKey, boolean>>({ monthly_contribution: false, monthly_expenses: false })
-  const [detectedReturn, setDetectedReturn] = useState<number | null>(null)
-
-  useEffect(() => {
-    api.analytics.accountReturns().then(r => {
-      const pct = r.weighted_annual_return_pct
-      if (pct && pct > 0) {
-        setDetectedReturn(pct)
-        setParams(p => ({ ...p, annual_return_pct: Math.round(pct * 10) / 10 }))
-      }
-    }).catch(() => { /* non-fatal */ })
-  }, [])
 
   // Debounced + race-safe: dragging a slider fires this on every tick, but
   // only the latest response after a ~300ms pause is ever applied.
@@ -55,6 +44,8 @@ export default function GoalCalculator() {
     ],
     300,
   )
+
+  const detectedReturn = data?.detected_return_pct ?? null
 
   // Keep untouched sliders tracking the backend's resolved (auto-detected)
   // value, so the first drag starts from a realistic number instead of 0.
@@ -89,7 +80,7 @@ export default function GoalCalculator() {
               style={{ fontSize: '0.75rem', marginLeft: 8 }}
               onClick={() => setTouched(t => ({ ...t, [autoKey]: false }))}
             >
-              Reset to auto-detect
+              Ripristina dai dati
             </button>
           )}
         </label>
@@ -153,7 +144,7 @@ export default function GoalCalculator() {
       `Monthly contribution: ${fmt(data.monthly_contribution, data.currency)}.`,
       `Annual return assumption: ${params.annual_return_pct}%.`,
       `Safe withdrawal rate: ${params.withdrawal_rate_pct}%.`,
-      `Monthly expenses: ${fmt(params.monthly_expenses, data.currency)}.`,
+      `Spese mensili: ${fmt(params.monthly_expenses, data.currency)}.`,
       `Time to target: ${targetTiming}.`,
       'Explain the tradeoffs, the weakest assumption, and one realistic adjustment to try next.',
     ].join('\n')
@@ -170,14 +161,14 @@ export default function GoalCalculator() {
         <>
           <section className="goal-planner-hero">
             <div className="goal-planner-hero-copy">
-              <div className="goal-planner-kicker">Goal planner</div>
+              <div className="goal-planner-kicker">Pianifica un obiettivo</div>
               <h2>
                 {data.years_to_target === null
-                  ? 'Target is outside the current projection window'
-                  : `${data.years_to_target.toFixed(1)} years to target`}
+                  ? 'Obiettivo oltre l’orizzonte della simulazione'
+                  : `${data.years_to_target.toFixed(1)} anni all’obiettivo`}
               </h2>
               <p>
-                {fmt(targetGap, data.currency)} left to reach {fmt(data.target_amount, data.currency)} with {params.annual_return_pct}% annual return assumed.
+                {fmt(targetGap, data.currency)} per raggiungere {fmt(data.target_amount, data.currency)} con un rendimento annuale ipotizzato del {params.annual_return_pct}%.
               </p>
               <div className="goal-progress-track">
                 <div className="goal-progress-fill" style={{ width: `${targetProgress}%` }} />
@@ -185,19 +176,19 @@ export default function GoalCalculator() {
             </div>
             <div className="goal-planner-hero-stats">
               <div>
-                <span>Current</span>
+                <span>Attuale</span>
                 <strong>{fmt(data.current_nw, data.currency)}</strong>
               </div>
               <div>
-                <span>Target</span>
+                <span>Obiettivo</span>
                 <strong>{fmt(data.target_amount, data.currency)}</strong>
               </div>
               <div>
-                <span>FIRE number</span>
+                <span>Capitale per indipendenza</span>
                 <strong>{fmt(data.fire_number, data.currency)}</strong>
               </div>
               <div>
-                <span>Monthly</span>
+                <span>Versamento mensile</span>
                 <strong>{fmt(data.monthly_contribution, data.currency)}</strong>
               </div>
             </div>
@@ -205,34 +196,34 @@ export default function GoalCalculator() {
 
           <div className="goal-planner-workspace">
             <section className="card goal-planner-controls">
-              <div className="section-title" style={{ marginBottom: '1rem' }}>Parameters</div>
-              {field('Target Amount', 'target_amount', 0, 5000000, 10000, data.currency)}
-              {field('Annual Return', 'annual_return_pct', 0, 20, 0.5, '%')}
-              {field('Monthly Contribution', 'monthly_contribution', 0, 10000, 100, data.currency, 'monthly_contribution')}
-              {field('Safe Withdrawal Rate', 'withdrawal_rate_pct', 1, 10, 0.1, '%')}
-              {field('Monthly Expenses', 'monthly_expenses', 0, 10000, 100, data.currency, 'monthly_expenses')}
+              <div className="section-title" style={{ marginBottom: '1rem' }}>Parametri</div>
+              {field('Capitale obiettivo', 'target_amount', 0, 5000000, 10000, data.currency)}
+              {field('Rendimento annuale', 'annual_return_pct', 0, 20, 0.5, '%')}
+              {field('Versamento mensile', 'monthly_contribution', 0, 10000, 100, data.currency, 'monthly_contribution')}
+              {field('Tasso di prelievo', 'withdrawal_rate_pct', 1, 10, 0.1, '%')}
+              {field('Spese mensili', 'monthly_expenses', 0, 10000, 100, data.currency, 'monthly_expenses')}
             </section>
 
             <section className="goal-planner-side-stack">
               <div className="card goal-detected-card">
-                <div className="goal-planner-kicker">Detected from your data</div>
+                <div className="goal-planner-kicker">Dai tuoi dati</div>
                 {hasDetected ? (
                   <div className="goal-detected-list">
                     {data.detected_income != null && (
                       <div className="goal-detected-row">
-                        <span>Monthly income</span>
+                        <span>Entrate mensili</span>
                         <strong>{fmt(data.detected_income, data.currency)}</strong>
                       </div>
                     )}
                     {data.detected_expenses != null && (
                       <div className="goal-detected-row">
-                        <span>Monthly expenses</span>
+                        <span>Spese mensili</span>
                         <strong>{fmt(data.detected_expenses, data.currency)}</strong>
                       </div>
                     )}
                     {data.detected_return_pct != null && (
                       <div className="goal-detected-row">
-                        <span>Portfolio return</span>
+                        <span>Rendimento del portafoglio</span>
                         <strong className={data.detected_return_pct >= 5 ? 'positive' : data.detected_return_pct >= 1 ? 'watch' : ''}>
                           {data.detected_return_pct >= 0 ? '+' : ''}{data.detected_return_pct.toFixed(1)}%/yr
                         </strong>
@@ -240,29 +231,29 @@ export default function GoalCalculator() {
                     )}
                     {data.detected_income != null && data.detected_expenses != null && (
                       <div className="goal-detected-row emphasized">
-                        <span>Detected contribution</span>
+                        <span>Versamento rilevato</span>
                         <strong>{fmt(Math.max(0, data.detected_income - data.detected_expenses), data.currency)}/mo</strong>
                       </div>
                     )}
                   </div>
                 ) : (
-                  <p className="goal-muted-copy">Add more categorized transactions and balance history to unlock automatic planning assumptions.</p>
+                  <p className="goal-muted-copy">Aggiungi movimenti classificati e uno storico dei saldi per ricavare le ipotesi dai dati.</p>
                 )}
                 {detectedReturn != null && (
                   <p className="goal-muted-copy">
-                    Annual return pre-filled from your portfolio CAGR ({detectedReturn.toFixed(1)}%/yr).
+                    Rendimento annualizzato registrato: {detectedReturn.toFixed(1)}%. La proiezione usa il rendimento che scegli per lo scenario.
                   </p>
                 )}
               </div>
 
               <div className="projection-ai-card goal-ai-card">
                 <div>
-                  <div className="projection-ai-title"><Sparkles size={16} /> Ask about this plan</div>
-                  <p>Send these assumptions and the projected time to target to the Financial Helper.</p>
+                  <div className="projection-ai-title"><Sparkles size={16} /> Approfondisci questo piano</div>
+                  <p>Approfondisci queste ipotesi e i tempi previsti con l’assistente.</p>
                 </div>
                 <div className="projection-ai-actions">
                   <button className="btn btn-secondary btn-sm" onClick={() => askHelper('whether this target plan is realistic')}>
-                    Reality check <ArrowRight size={13} />
+                    Verifica le ipotesi <ArrowRight size={13} />
                   </button>
                   <button className="btn btn-secondary btn-sm" onClick={() => askHelper('how to reach the target sooner')}>
                     Reach sooner <ArrowRight size={13} />
@@ -276,7 +267,7 @@ export default function GoalCalculator() {
           </div>
 
           <section>
-            <div className="section-title">Projection</div>
+            <div className="section-title">Proiezione</div>
             <div className="card projection-chart-card">
               <MoneyChart
                 data={projectionTrace}

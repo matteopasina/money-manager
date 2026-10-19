@@ -1,6 +1,6 @@
 import sqlite3
 import os
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Optional
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -69,17 +69,22 @@ DEFAULT_CATEGORIES = [
     ("Bills",         "#C97B4A", False, False),
     ("Housing",       "#8C9A6B", False, False),
     ("Health",        "#9A6B4A", False, False),
+    ("Personal Care", "#9A7B6A", False, False),
+    ("Cash Withdrawal", "#8A7864", False, False),
     ("Travel",        "#7A8C6B", False, False),
     ("Entertainment", "#B0915C", False, False),
     ("Sport",         "#5C7A6E", False, False),
     ("Investment",    "#D4A24C", False, True),   # is_transfer
     ("Income",        "#4A6741", True,  False),  # is_income
     ("Transfer",      "#8B6F47", False, True),   # is_transfer
+    ("Trade",         "#D4A24C", False, True),
+    ("Dividends",     "#4A6741", True, False),
     ("Other",         "#B0745C", False, False),
 ]
 
 DEFAULT_SETTINGS = {
     "base_currency": "EUR",
+    "llm_model": "gpt-6-luna",
     "auto_sync_enabled": "true",
     "auto_sync_interval_hours": "24",
 }
@@ -526,10 +531,16 @@ def get_categories() -> list[Category]:
 def upsert_category(cat: Category) -> Category:
     with get_connection() as conn:
         if cat.id:
+            previous = conn.execute("SELECT name FROM categories WHERE id = ?", (cat.id,)).fetchone()
+            if previous is None:
+                raise ValueError("Category not found")
             conn.execute(
                 "UPDATE categories SET name=?, color=?, is_income=?, is_transfer=? WHERE id=?",
                 (cat.name, cat.color, int(cat.is_income), int(cat.is_transfer), cat.id),
             )
+            if previous["name"] != cat.name:
+                for table, column in (("transactions", "category"), ("keyword_rules", "category_name"), ("budgets", "category_name")):
+                    conn.execute(f"UPDATE {table} SET {column} = ? WHERE {column} = ?", (cat.name, previous["name"]))
             return cat
         else:
             cur = conn.execute(
@@ -617,6 +628,10 @@ _DEFAULT_RULES: list[tuple[str, str, str, int]] = [
     # Transport
     ("repsol",      "Transport", "description", 0),
     ("agip",        "Transport", "description", 0),
+    ("pago con tarjeta en gasolineras", "Transport", "description", 10),
+    ("pago con tarjeta en transporte y alquiler de vehiculos", "Transport", "description", 10),
+    ("pago con tarjeta en sector del automovil", "Transport", "description", 10),
+    ("pago con tarjeta en autopistas y peajes", "Transport", "description", 10),
     # Sport
     ("decathlon",   "Sport", "description", 0),
     ("playtomic",   "Sport", "description", 0),
@@ -644,6 +659,7 @@ _DEFAULT_RULES: list[tuple[str, str, str, int]] = [
     # Health
     ("farmacia",    "Health", "description", 0),
     ("clinicsport", "Health", "description", 0),
+    # Personal care
     # Bills
     ("enel",        "Bills", "description", 0),
     ("vodafone",    "Bills", "description", 0),
@@ -651,13 +667,23 @@ _DEFAULT_RULES: list[tuple[str, str, str, int]] = [
     ("addebito american express", "Bills", "description", 0),
     ("wind tre",    "Bills", "description", 0),
     ("iliad",       "Bills", "description", 0),
+    ("pago con tarjeta de tasa, seguros, impuestos", "Bills", "description", 10),
+    ("impuesto de timbre", "Bills", "description", 10),
     # Shopping
     ("amazon",      "Shopping", "description", 0),
     ("zara",        "Shopping", "description", 0),
+    ("pago con tarjeta en discos, libros, fotos y pc's", "Shopping", "description", 10),
+    # Cash withdrawals
+    ("ret. efectivo", "Cash Withdrawal", "description", 10),
+    ("cash at ",      "Cash Withdrawal", "description", 10),
+    ("rit. contanti a debito con carta", "Cash Withdrawal", "description", 10),
     # Transfers between own accounts (not real income/spend)
     ("deposits/withdrawals", "Transfer", "reference", 0),
+    ("google pay top-up", "Transfer", "description", 10),
     # BBVA via Enable Banking uses Spanish descriptions (Excel exports were Italian)
     ("abono de nomina", "Income", "description", 0),
+    ("a fronte del saldo mensile", "Income", "description", 10),
+    ("pago con tarjeta en supermercados", "Groceries", "description", 10),
     ("ordenes pago emitidas", "Investment", "description", 0),
     # IB dividend credits and their withholding-tax rows (negative) net together
     ("cash dividend", "Dividends", "description", 0),
@@ -721,11 +747,11 @@ def get_monthly_spend_by_category(
     categories: Optional[list[str]] = None,
 ) -> dict[str, dict[str, float]]:
     """{category: {'YYYY-MM': spent}} — spending only (amount < 0, non-transfer,
-    non-income categories), as positive base-currency floats. Months without
+    non-transfer categories), as positive base-currency floats. Months without
     spending are simply absent; callers read them as 0 via .get()."""
     excluded = get_transfer_category_names()
-    conditions = ["amount < 0", "category IS NOT NULL"]
-    params: list = []
+    conditions = ["COALESCE(amount_base, amount) < 0", "category IS NOT NULL", "date <= ?"]
+    params: list = [date.today().isoformat()]
     if excluded:
         conditions.append(f"category NOT IN ({','.join('?' * len(excluded))})")
         params += list(excluded)
@@ -761,10 +787,10 @@ def get_monthly_total_spend(
 ) -> dict[str, float]:
     """{'YYYY-MM': spent} across ALL spending — unlike the per-category helper,
     uncategorized (NULL-category) rows count too, since a total cap must catch
-    everything that isn't a transfer or income."""
+    all negative non-transfer amounts, including taxes and income reversals."""
     excluded = get_transfer_category_names()
-    conditions = ["amount < 0"]
-    params: list = []
+    conditions = ["COALESCE(amount_base, amount) < 0", "date <= ?"]
+    params: list = [date.today().isoformat()]
     if excluded:
         conditions.append(
             f"(category IS NULL OR category NOT IN ({','.join('?' * len(excluded))}))"
@@ -790,51 +816,55 @@ def get_monthly_total_spend(
 # ── Analytics helpers (used by Predictions / Goal Calculator) ──────────────────
 
 def get_transfer_category_names() -> set[str]:
-    """Returns names of all categories marked as income or transfer (excluded from spend)."""
+    """Returns transfer categories excluded from both incoming cash and spending."""
     with get_connection() as conn:
         rows = conn.execute(
-            "SELECT name FROM categories WHERE is_income = 1 OR is_transfer = 1"
+            "SELECT name FROM categories WHERE is_transfer = 1"
         ).fetchall()
     return {r["name"] for r in rows}
 
 
-def get_transaction_monthly_spend(months: int = 6) -> float:
-    import pandas as pd
-    excluded = get_transfer_category_names()
-    placeholders = ",".join("?" * len(excluded)) if excluded else "''"
+def get_transaction_cash_flow_averages(months: int = 6) -> dict:
+    """Comparable income/spending averages over the last completed calendar months.
+
+    Use base currency, include uncategorized rows and zero-activity months, and
+    exclude transfers. The current partial month is never treated as a full one.
+    """
+    from dateutil.relativedelta import relativedelta
+    from statistics import median
+
+    if months < 1:
+        raise ValueError("months must be positive")
+    end = date.today().replace(day=1)
+    start = end - relativedelta(months=months)
     with get_connection() as conn:
-        df = pd.read_sql_query(
-            f"""SELECT date, amount FROM transactions
-                WHERE {"category NOT IN (" + placeholders + ") AND " if excluded else ""}amount < 0
-                ORDER BY date DESC""",
-            conn, params=list(excluded) if excluded else [],
-        )
-    if df.empty:
-        return 0.0
-    df["date"] = pd.to_datetime(df["date"])
-    df["month"] = df["date"].dt.to_period("M").astype(str)
-    monthly = df.groupby("month")["amount"].sum().abs()
-    return float(monthly.iloc[-months:].mean()) if len(monthly) >= 1 else 0.0
+        first = conn.execute("SELECT MIN(date) FROM transactions").fetchone()[0]
+        if first:
+            start = max(start, date.fromisoformat(first[:7] + "-01"))
+        rows = conn.execute(
+            """SELECT substr(t.date, 1, 7) AS month,
+                      SUM(CASE WHEN COALESCE(t.amount_base,t.amount) > 0 THEN COALESCE(t.amount_base,t.amount) ELSE 0 END) AS income,
+                      SUM(CASE WHEN COALESCE(t.amount_base,t.amount) < 0 THEN -COALESCE(t.amount_base,t.amount) ELSE 0 END) AS spending
+               FROM transactions t
+               LEFT JOIN categories c ON c.name = t.category
+               WHERE t.date >= ? AND t.date < ? AND COALESCE(c.is_transfer,0) = 0
+               GROUP BY month""", (start.isoformat(), end.isoformat()),
+        ).fetchall()
+    count = max(0, (end.year - start.year) * 12 + end.month - start.month)
+    income = {r["month"]: r["income"] for r in rows}
+    income_values = [income.get((start + relativedelta(months=i)).strftime("%Y-%m"), 0) for i in range(count)]
+    return {
+        "income": sum(income_values) / count if count else 0.0,
+        "income_median": float(median(income_values)) if count else 0.0,
+        "spending": sum(r["spending"] for r in rows) / count if count else 0.0,
+        "months": count,
+    }
+
+
+def get_transaction_monthly_spend(months: int = 6) -> float:
+    return get_transaction_cash_flow_averages(months)["spending"]
 
 
 def get_transaction_avg_income() -> tuple[float, float]:
-    import pandas as pd
-    with get_connection() as conn:
-        income_cats = conn.execute(
-            "SELECT name FROM categories WHERE is_income = 1"
-        ).fetchall()
-    if not income_cats:
-        return 0.0, 0.0
-    names = [r["name"] for r in income_cats]
-    placeholders = ",".join("?" * len(names))
-    with get_connection() as conn:
-        df = pd.read_sql_query(
-            f"SELECT date, amount FROM transactions WHERE category IN ({placeholders}) AND amount > 0",
-            conn, params=names,
-        )
-    if df.empty:
-        return 0.0, 0.0
-    df["date"] = pd.to_datetime(df["date"])
-    df["month"] = df["date"].dt.to_period("M").astype(str)
-    monthly = df.groupby("month")["amount"].sum()
-    return float(monthly.mean()), float(monthly.median())
+    averages = get_transaction_cash_flow_averages()
+    return averages["income"], averages["income_median"]

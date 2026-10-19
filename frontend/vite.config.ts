@@ -2,13 +2,13 @@ import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import mkcert from 'vite-plugin-mkcert'
 
-export default defineConfig({
+export default defineConfig(({ command, mode }) => ({
   // mkcert serves the dev server over https://localhost:5173 with a
   // locally-trusted cert (via the system mkcert CA) — required because
   // Enable Banking rejects http:// redirect URLs, even for localhost.
-  plugins: [react(), mkcert()],
+  plugins: [react(), ...(command === 'serve' && mode !== 'test' ? [mkcert()] : [])],
   optimizeDeps: {
-    include: ['react-plotly.js', 'plotly.js'],
+    include: ['react-plotly.js/factory', 'plotly.js/dist/plotly-basic.min.js'],
   },
   server: {
     proxy: {
@@ -24,4 +24,4 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/__tests__/setup.ts'],
   },
-})
+}))

@@ -80,3 +80,7 @@ Configured via app settings (`llm_model`, `llm_api_key`). Uses LiteLLM so any pr
 - FX rates must be `> 0` — the API enforces this with a Pydantic validator
 - `withdrawal_rate_pct` in the FIRE calculator must be `> 0` — validated at the API layer
 - Credential settings (`db.SECRET_SETTINGS`: EB private key, Binance secret, IB token, LLM key) are encrypted at rest (Fernet key in `finances.db.key`, 0600) and masked as `__secret__` by `GET /api/settings` — they are write-only from the browser. When adding a new credential setting, add it to `SECRET_SETTINGS` and follow the write-only pattern in Connections.tsx
+
+## Publication privacy
+
+Before every commit and push, review staged files for secrets and personal or financial data, including fixtures and screenshots. Never publish databases, credentials, imports, local audits or verification evidence. Use synthetic test data. Run gitleaks with redacted output; commit and push hooks must block if the scanner is unavailable or reports a leak.

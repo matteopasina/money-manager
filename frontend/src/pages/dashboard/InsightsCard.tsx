@@ -1,4 +1,3 @@
-import { useNavigate } from 'react-router-dom'
 import { Sparkles } from 'lucide-react'
 import type { AssistantInsight } from '../../api/client'
 import { insightTone } from './data'
@@ -6,22 +5,16 @@ import { insightTone } from './data'
 interface Props {
   insights: AssistantInsight[]
   loading: boolean
+  error?: string | null
   onAskHelper: (prompt: string) => void
 }
 
-export default function InsightsCard({ insights, loading, onAskHelper }: Props) {
-  const navigate = useNavigate()
+export default function InsightsCard({ insights, loading, error, onAskHelper }: Props) {
 
   return (
     <div
       className="card"
-      role="link"
-      tabIndex={0}
-      onClick={() => navigate('/financial-helper')}
-      onKeyDown={e => {
-        if (e.key === 'Enter' || e.key === ' ') navigate('/financial-helper')
-      }}
-      style={{ marginBottom: '18px', padding: '18px', cursor: 'pointer' }}
+      style={{ marginTop: '18px', padding: '18px' }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 14 }}>
         <div>
@@ -40,6 +33,8 @@ export default function InsightsCard({ insights, loading, onAskHelper }: Props) 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--ink-faint)', fontSize: '0.82rem' }}>
           <span className="spinner" style={{ width: 16, height: 16 }} /> Reviewing your finances…
         </div>
+      ) : error ? (
+        <div role="status">Helper insights could not be loaded. Open the financial helper to try again.</div>
       ) : insights.length === 0 ? (
         <div style={{ color: 'var(--ink-faint)', fontSize: '0.82rem' }}>
           No helper insights yet. Add transactions, balances, or budgets and I’ll have more to say.

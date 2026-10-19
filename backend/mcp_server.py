@@ -123,13 +123,13 @@ def create_budget(category_name: str, monthly_amount: float, rollover: bool = Fa
 
 @mcp.tool()
 def preview_reapply_keyword_rules(limit: int = 20) -> dict:
-    """Preview transaction category changes before reapplying keyword rules."""
+    """Preview changes from matching rules; unmatched categories are preserved."""
     return _json_result(write_tools.preview_reapply_keyword_rules({"limit": limit}))
 
 
 @mcp.tool()
 def reapply_keyword_rules(confirm: bool = False) -> dict:
-    """Reapply keyword rules to all transactions only after preview approval."""
+    """Apply matching rules after preview approval; preserve unmatched categories."""
     return _json_result(write_tools.reapply_keyword_rules({"confirm": confirm}))
 
 

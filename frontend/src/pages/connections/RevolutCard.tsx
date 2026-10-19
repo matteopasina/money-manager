@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { api, type Account } from '../../api/client'
 import ProviderCard from './ProviderCard'
+import BankConsentStatus from './BankConsentStatus'
+import { bankStatusLabel, useBankStatus } from './useBankStatus'
 import { RevolutLogo } from './logos'
 import { REVOLUT_GUIDE_STEPS } from './guides'
 
@@ -22,6 +24,7 @@ export default function RevolutCard({
   accounts, initial, connected, ebAccounts, ebAppId, setEbAppId, ebPrivateKey, setEbPrivateKey, ebKeySaved,
   saveEbCredentials, onMsg,
 }: Props) {
+  const { link, refresh } = useBankStatus('revolut', connected)
   const [accountId, setAccountId]         = useState<number | ''>(initial.accountId)
   const [aspspName, setAspspName]         = useState(initial.aspspName)
   const [aspspCountry, setAspspCountry]   = useState(initial.aspspCountry)
@@ -50,15 +53,24 @@ export default function RevolutCard({
     }
   }
 
+  async function persistSettings() {
+    if (!accountId || !aspspName.trim() || !aspspCountry.trim()) {
+      onMsg({ type: 'error', text: 'Select an institution and an import account first.' })
+      return false
+    }
+    if (!(await saveEbCredentials())) return false
+    await Promise.all([
+      api.settings.set('revolut_eb_aspsp_name', aspspName.trim()),
+      api.settings.set('revolut_eb_aspsp_country', aspspCountry.trim()),
+      api.settings.set('revolut_account_id', String(accountId)),
+    ])
+    return true
+  }
+
   async function saveSettings() {
     setSaving(true)
     try {
-      if (!(await saveEbCredentials())) return
-      await Promise.all([
-        api.settings.set('revolut_eb_aspsp_name', aspspName.trim()),
-        api.settings.set('revolut_eb_aspsp_country', aspspCountry.trim()),
-        api.settings.set('revolut_account_id', String(accountId)),
-      ])
+      if (!(await persistSettings())) return
       onMsg({ type: 'success', text: 'Revolut settings saved.' })
     } catch (e: unknown) {
       onMsg({ type: 'error', text: e instanceof Error ? e.message : String(e) })
@@ -70,9 +82,9 @@ export default function RevolutCard({
   async function connect() {
     setConnecting(true)
     try {
-      const res = await api.revolut.connect()
-      window.open(res.url, '_blank')
-      onMsg({ type: 'success', text: 'Authorisation opened in a new tab — approve it there, then come back here.' })
+      if (!(await persistSettings())) return
+      const res = await api.revolut.connect(`${window.location.origin}/connections`)
+      window.location.assign(res.url)
     } catch (e: unknown) {
       onMsg({ type: 'error', text: e instanceof Error ? e.message : String(e) })
     } finally {
@@ -100,11 +112,13 @@ export default function RevolutCard({
       logo={<RevolutLogo />}
       name="Revolut"
       description="Import transactions and balance via the Enable Banking open-banking API."
-      connected={connected}
+      connected={link.status === 'active'}
+      statusLabel={bankStatusLabel(link.status)}
       guideOpen={guideOpen}
       onToggleGuide={() => setGuideOpen(o => !o)}
       guideSteps={REVOLUT_GUIDE_STEPS}
     >
+      <BankConsentStatus link={link} onRefresh={refresh} />
       <div className="form-group">
         <label>Enable Banking Application ID</label>
         <input value={ebAppId} onChange={e => setEbAppId(e.target.value)} placeholder="Your Enable Banking Application ID" />
@@ -128,7 +142,7 @@ export default function RevolutCard({
 
       <div className="form-group">
         <label>Institution</label>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
           <input
             value={lookupCountry}
             onChange={e => setLookupCountry(e.target.value.toUpperCase())}
@@ -142,13 +156,14 @@ export default function RevolutCard({
         {aspspOptions.length > 0 && (
           <div style={{ marginTop: '0.5rem', fontSize: '0.8rem', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
             {aspspOptions.map(opt => (
-              <div
+              <button
+                type="button"
                 key={`${opt.name}-${opt.country}`}
-                style={{ padding: '0.4rem 0.6rem', cursor: 'pointer', borderBottom: '1px solid var(--border)' }}
+                style={{ padding: '0.4rem 0.6rem', background: 'var(--bg-card)', color: 'var(--ink)', width: '100%', textAlign: 'left', cursor: 'pointer', borderBottom: '1px solid var(--border)' }}
                 onClick={() => { setAspspName(opt.name); setAspspCountry(opt.country); setAspspOptions([]) }}
               >
                 <strong>{opt.name}</strong> <span style={{ color: 'var(--ink-faint)' }}>{opt.country}</span>
-              </div>
+              </button>
             ))}
           </div>
         )}
@@ -185,10 +200,10 @@ export default function RevolutCard({
             </p>
           )}
           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-            <button className="btn btn-primary" onClick={() => sync('transactions')} disabled={syncing !== null}>
+            <button className="btn btn-primary" onClick={() => sync('transactions')} disabled={syncing !== null || link.status === 'expired'}>
               {syncing === 'transactions' ? 'Syncing…' : 'Sync Transactions'}
             </button>
-            <button className="btn btn-primary" onClick={() => sync('balances')} disabled={syncing !== null}>
+            <button className="btn btn-primary" onClick={() => sync('balances')} disabled={syncing !== null || link.status === 'expired'}>
               {syncing === 'balances' ? 'Syncing…' : 'Sync Balance'}
             </button>
             <button className="btn btn-secondary" onClick={connect} disabled={connecting}>

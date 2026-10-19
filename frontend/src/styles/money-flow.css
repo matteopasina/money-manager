@@ -1,0 +1,45 @@
+/* The diagram adapts to its card, independently of sidebar or dashboard layout. */
+.flow-panel { container-type: inline-size; }
+.flow-reading { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; color: var(--ink-muted); font-size: 12px; }
+.flow-reading strong { color: var(--ink); font-weight: 600; }
+.flow-reading-dot { width: 6px; height: 6px; background: var(--flow-income-ink); border-radius: 50%; margin-right: 4px; }
+.flow-map { margin: 24px 0 4px; }
+.flow-map svg { width: 100%; display: block; overflow: visible; }
+.flow-map text { fill: var(--ink-muted); font-family: var(--font-body); font-size: 14px; }
+.flow-map .flow-map-value { fill: var(--ink); font-family: var(--font-display); font-size: 27px; font-variant-numeric: tabular-nums; }
+.flow-map .flow-map-deficit { fill: var(--loss); }
+.flow-income-mark { fill: var(--flow-income-ink); }
+.flow-deficit-mark { fill: var(--flow-saving); }
+.flow-spending-mark { fill: var(--flow-income-ink); }
+.flow-map .flow-hub-label { font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; }
+.flow-map .flow-hub-value { font-family: var(--font-display); font-size: 25px; fill: var(--ink); }
+.flow-map .flow-category-name { fill: var(--ink); font-size: 15px; }
+.flow-map .flow-category-value { font-size: 16px; font-weight: 600; fill: var(--ink); font-variant-numeric: tabular-nums; }
+.flow-map .flow-category-share { font-size: 12px; fill: var(--ink-faint); font-weight: 400; }
+.flow-map .flow-map-surplus { fill: var(--link); }
+.flow-category-ribbon { opacity: 0.24; transition: opacity 160ms; }
+.flow-branch { text-decoration: none; }
+.flow-branch:hover .flow-category-ribbon, .flow-branch:focus-visible .flow-category-ribbon { opacity: 0.58; }
+.flow-branch:hover .flow-category-name, .flow-branch:focus-visible .flow-category-name { text-decoration: underline; text-underline-offset: 4px; }
+.flow-branch:focus-visible { outline: none; }
+.flow-branch:focus-visible .flow-target { stroke: var(--ink); stroke-width: 2px; }
+.flow-bottom-note { padding-top: 16px; border-top: 1px solid var(--border-soft); font-size: 11px; color: var(--ink-faint); line-height: 1.6; }
+.flow-compact { display: none; }
+@container (max-width: 480px) {
+  .flow-map { display: none; }
+  .flow-compact { display: block; margin: 22px 0; }
+  .flow-compact-sources { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-bottom: 24px; }
+  .flow-compact-sources dt { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-faint); }
+  .flow-compact-sources dd { font-family: var(--font-display); font-size: 27px; color: var(--ink); margin-top: 8px; overflow-wrap: anywhere; }
+  .flow-compact-sources .text-loss { color: var(--loss); }
+  .flow-compact-sources .text-gain { color: var(--gain); }
+  .flow-compact-heading { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 14px; color: var(--ink); }
+  .flow-compact-heading strong { font-weight: 500; }
+  .flow-compact-categories { list-style: none; display: grid; gap: 14px; }
+  .flow-compact-categories a { display: grid; grid-template-columns: 6px minmax(0, 1fr) auto 32px; align-items: center; gap: 8px; text-decoration: none; color: var(--ink); font-size: 13px; }
+  .flow-compact-categories strong { font-weight: 500; font-variant-numeric: tabular-nums; }
+  .flow-compact-categories small { color: var(--ink-faint); text-align: right; }
+  .flow-category-dot { width: 6px; height: 6px; border-radius: 50%; }
+  .flow-compact-track { grid-column: 2 / -1; height: 3px; background: var(--bg-chip); border-radius: 4px; overflow: hidden; }
+  .flow-compact-track > span { display: block; height: 100%; border-radius: inherit; }
+}

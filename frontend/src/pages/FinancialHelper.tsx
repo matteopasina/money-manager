@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { ArrowRight, Sparkles, Send, Trash2 } from 'lucide-react'
 import { api, type AssistantCleanup, type AssistantReview, type ChatMessage } from '../api/client'
 import { fmtAmount } from '../utils/money'
@@ -34,27 +34,27 @@ async function fetchPageContext(pathname: string): Promise<string> {
 function promptGroups() {
   return [
     {
-      label: 'Review',
+      label: 'Riepilogo',
       prompts: [
-        'Give me a quick financial review',
-        'What changed most recently?',
-        'What deserves attention this week?',
+        'Fammi un breve riepilogo della mia situazione finanziaria',
+        'Che cosa è cambiato di recente?',
+        'Che cosa merita attenzione questa settimana?',
       ],
     },
     {
-      label: 'Spending',
+      label: 'Spese',
       prompts: [
-        'Summarize spending by category this month',
-        'Find recurring subscriptions',
-        'Show transactions that need categorization',
+        'Riepiloga le spese per categoria di questo mese',
+        'Trova gli abbonamenti ricorrenti',
+        'Mostra i movimenti da classificare',
       ],
     },
     {
-      label: 'Planning',
+      label: 'Pianificazione',
       prompts: [
-        'Review my budget risks',
-        'Explain my path to financial independence',
-        'Do I have enough liquid cash?',
+        'Controlla i rischi nei miei budget',
+        'Spiega il mio percorso verso l’indipendenza finanziaria',
+        'Ho liquidità sufficiente?',
       ],
     },
   ]
@@ -251,18 +251,18 @@ export default function FinancialHelper() {
     <div>
       <div className="page-header">
         <div>
-          <h1>Financial Helper</h1>
-          <p>Ask for reviews, drill into spending, and pressure-test plans.</p>
+          <h1>Assistente</h1>
+          <p>Fai chiarezza sulle spese, controlla i dati ed esplora i tuoi piani.</p>
         </div>
         <button className="btn btn-secondary" onClick={clear} disabled={!messages.length && !apiHistory.length}>
-          <Trash2 size={15} /> Clear
+          <Trash2 size={15} /> Svuota
         </button>
       </div>
 
       <div className="helper-tabs">
         {[
-          ['review', 'Review'],
-          ['cleanup', 'Cleanup'],
+          ['review', 'Riepilogo'],
+          ['cleanup', 'Riordina movimenti'],
           ['chat', 'Chat'],
         ].map(([value, label]) => (
           <button
@@ -281,14 +281,14 @@ export default function FinancialHelper() {
             <div className="helper-rail-head">
               <Sparkles size={18} />
               <div>
-                <div className="helper-rail-title">Start here</div>
-                <div className="helper-rail-sub">Pick a thread to pull.</div>
+                <div className="helper-rail-title">Da dove iniziamo</div>
+                <div className="helper-rail-sub">Scegli una domanda da approfondire.</div>
               </div>
             </div>
 
             {!model && (
               <div className="helper-notice">
-                No model configured. Set one in Preferences.
+                Nessun modello configurato. <Link to="/settings/preferences">Sceglilo nelle Preferenze →</Link>
               </div>
             )}
 
@@ -318,32 +318,32 @@ export default function FinancialHelper() {
               {!analysisLoading && reviewError && (
                 <div className="helper-empty">
                   <Sparkles size={22} />
-                  <div className="helper-empty-title">Review unavailable.</div>
+                  <div className="helper-empty-title">Riepilogo non disponibile.</div>
                   <div className="helper-empty-copy">{reviewError}</div>
                 </div>
               )}
               {!analysisLoading && !review && !reviewError && (
                 <div className="helper-empty">
                   <Sparkles size={22} />
-                  <div className="helper-empty-title">No review yet.</div>
-                  <div className="helper-empty-copy">Add transactions and balances to generate a monthly review.</div>
+                  <div className="helper-empty-title">Il tuo riepilogo apparirà qui.</div>
+                  <div className="helper-empty-copy">Aggiungi movimenti e saldi per ottenere un riepilogo mensile.</div>
                 </div>
               )}
               {!analysisLoading && review && (
                 <div className="helper-analysis">
                   <div className="helper-analysis-header">
                     <div>
-                      <div className="helper-kicker">Monthly review</div>
+                      <div className="helper-kicker">Riepilogo mensile</div>
                       <h2>{review.period}</h2>
                     </div>
                     <span>{review.guardrail}</span>
                   </div>
 
                   <div className="helper-metric-grid">
-                    <div><span>Income</span><strong>{money(review.summary.income)}</strong></div>
-                    <div><span>Spending</span><strong>{money(review.summary.spending)}</strong></div>
-                    <div><span>Net cash flow</span><strong>{money(review.summary.net_cash_flow)}</strong></div>
-                    <div><span>Savings rate</span><strong>{review.summary.savings_rate === null ? 'n/a' : `${review.summary.savings_rate}%`}</strong></div>
+                    <div><span>Entrate</span><strong>{money(review.summary.income)}</strong></div>
+                    <div><span>Spese</span><strong>{money(review.summary.spending)}</strong></div>
+                    <div><span>Saldo dei movimenti</span><strong>{money(review.summary.net_cash_flow)}</strong></div>
+                    <div><span>Tasso di risparmio</span><strong>{review.summary.savings_rate === null ? 'n/a' : `${review.summary.savings_rate}%`}</strong></div>
                   </div>
 
                   <div className="helper-section-grid">
@@ -362,7 +362,7 @@ export default function FinancialHelper() {
 
                   <div className="helper-two-col">
                     <div className="helper-table-card">
-                      <div className="helper-analysis-title">Top categories</div>
+                      <div className="helper-analysis-title">Categorie principali</div>
                       {review.top_categories.map(row => (
                         <div key={row.category} className="helper-row">
                           <span>{row.category}</span>
@@ -371,7 +371,7 @@ export default function FinancialHelper() {
                       ))}
                     </div>
                     <div className="helper-table-card">
-                      <div className="helper-analysis-title">Changes vs previous month</div>
+                      <div className="helper-analysis-title">Cosa è cambiato rispetto al mese scorso</div>
                       {review.category_changes.slice(0, 5).map(row => (
                         <div key={row.category} className="helper-row">
                           <span>{row.category}</span>
@@ -393,33 +393,36 @@ export default function FinancialHelper() {
               {!analysisLoading && cleanupError && (
                 <div className="helper-empty">
                   <Sparkles size={22} />
-                  <div className="helper-empty-title">Cleanup unavailable.</div>
+                  <div className="helper-empty-title">Riordino non disponibile.</div>
                   <div className="helper-empty-copy">{cleanupError}</div>
                 </div>
               )}
               {!analysisLoading && !cleanup && !cleanupError && (
                 <div className="helper-empty">
                   <Sparkles size={22} />
-                  <div className="helper-empty-title">No cleanup data.</div>
-                  <div className="helper-empty-copy">The cleanup queue could not be loaded yet.</div>
+                  <div className="helper-empty-title">Nessun dato da riordinare.</div>
+                  <div className="helper-empty-copy">Impossibile caricare i movimenti da controllare.</div>
                 </div>
               )}
               {!analysisLoading && cleanup && (
                 <div className="helper-analysis">
                   <div className="helper-analysis-header">
                     <div>
-                      <div className="helper-kicker">Cleanup queue</div>
-                      <h2>{cleanup.total} transactions</h2>
+                      <div className="helper-kicker">Movimenti da controllare</div>
+                      <h2>{cleanup.total} movimenti</h2>
+                      {cleanup.sampled !== undefined && cleanup.sampled < cleanup.total && (
+                        <p>Mostriamo {cleanup.sampled} movimenti recenti.</p>
+                      )}
                     </div>
                     <button className="btn btn-secondary btn-sm" onClick={() => sendQuestion('Help me clean up uncategorized transactions.')}>
-                      Ask helper
+                      Chiedi a Fuoco
                     </button>
                   </div>
 
                   {cleanup.groups.length === 0 ? (
                     <div className="helper-empty">
                       <Sparkles size={22} />
-                      <div className="helper-empty-title">Nothing to clean up.</div>
+                      <div className="helper-empty-title">Tutto in ordine.</div>
                     </div>
                   ) : (
                     <div className="helper-cleanup-list">
@@ -428,7 +431,7 @@ export default function FinancialHelper() {
                           <div>
                             <div className="helper-analysis-title">{group.merchant}</div>
                             <p>{group.count} transaction{group.count === 1 ? '' : 's'} · {money(group.total_spend)}</p>
-                            {group.suggested_category && <span className="badge">Suggested: {group.suggested_category}</span>}
+                            {group.suggested_category && <span className="badge">Suggerita: {group.suggested_category}</span>}
                           </div>
                           <div className="helper-evidence-list">
                             {group.evidence.slice(0, 3).map(tx => (
@@ -459,9 +462,9 @@ export default function FinancialHelper() {
             {empty && (
               <div className="helper-empty">
                 <Sparkles size={22} />
-                <div className="helper-empty-title">Ready when you are.</div>
+                <div className="helper-empty-title">Da dove iniziamo?</div>
                 <div className="helper-empty-copy">
-                  I can read your accounts, balances, budgets, and transactions through the app tools.
+                  Possiamo ragionare insieme su conti, saldi, budget e movimenti.
                 </div>
               </div>
             )}
@@ -483,11 +486,11 @@ export default function FinancialHelper() {
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendQuestion(input)}
-              placeholder={model ? 'Ask about your finances…' : 'Configure a model in Preferences first'}
+              placeholder={model ? 'Chiedi qualcosa sui tuoi soldi…' : 'Configura prima un modello nelle Preferenze'}
               disabled={loading || !model}
             />
             <button className="btn btn-primary" onClick={() => sendQuestion(input)} disabled={loading || !model || !input.trim()}>
-              <Send size={15} /> Send
+              <Send size={15} /> Invia
             </button>
           </div>
         </section>

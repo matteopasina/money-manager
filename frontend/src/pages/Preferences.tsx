@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api, SECRET_MASK } from '../api/client'
 import LoadingSpinner from '../components/LoadingSpinner'
 import Alert from '../components/Alert'
+import { VISUAL_STYLES } from '../theme'
 import { useTheme } from '../useTheme'
 import type { ThemeMode } from '../theme'
 
@@ -29,6 +30,8 @@ const MODEL_PRESETS = [
   {
     group: 'OpenAI',
     models: [
+      { label: 'GPT-6 Luna',    value: 'gpt-6-luna' },
+      { label: 'GPT-5.6 Luna',  value: 'gpt-5.6-luna' },
       { label: 'GPT-5.5',       value: 'gpt-5.5' },
       { label: 'GPT-5.4',       value: 'gpt-5.4' },
       { label: 'GPT-5.4 Mini',  value: 'gpt-5.4-mini' },
@@ -56,7 +59,8 @@ const MODEL_PRESETS = [
   },
 ]
 
-export default function Preferences() {
+export default function Preferences({ embedded = false }: { embedded?: boolean }) {
+  const Heading = embedded ? 'h2' : 'h1'
   const [loading, setLoading] = useState(true)
   const [model, setModel]     = useState('')
   const [apiKey, setApiKey]   = useState('')          // write-only: blank unless replacing
@@ -91,12 +95,12 @@ export default function Preferences() {
     }
   }
 
-  const { mode, setMode } = useTheme()
+  const { mode, setMode, visualStyle, setVisualStyle } = useTheme()
 
   const THEME_OPTIONS: { value: ThemeMode; label: string; desc: string }[] = [
-    { value: 'light',  label: '☀️ Light',  desc: 'Always light' },
-    { value: 'dark',   label: '🌙 Dark',   desc: 'Always dark' },
-    { value: 'system', label: '💻 System', desc: 'Follow macOS setting' },
+    { value: 'light',  label: '☀️ Chiaro',  desc: 'Sempre chiaro' },
+    { value: 'dark',   label: '🌙 Scuro',   desc: 'Sempre scuro' },
+    { value: 'system', label: '💻 Sistema', desc: 'Segui il sistema' },
   ]
 
   if (loading) return <LoadingSpinner />
@@ -105,17 +109,18 @@ export default function Preferences() {
     <div>
       <div className="page-header">
         <div>
-          <h1>Preferences</h1>
-          <p>Appearance and financial helper configuration</p>
+          <Heading>Preferenze</Heading>
+          <p>Aspetto e configurazione dell’assistente</p>
         </div>
       </div>
 
       {msg && <Alert type={msg.type} onClose={() => setMsg(null)}>{msg.text}</Alert>}
 
       <div className="card" style={{ maxWidth: 560, marginBottom: '1.5rem' }}>
-        <div className="section-title" style={{ marginBottom: '1rem' }}>Appearance</div>
+        <div className="section-title" style={{ marginBottom: '1rem' }}>Aspetto</div>
         <div className="form-group" style={{ margin: 0 }}>
-          <label>Theme</label>
+          <fieldset className="visual-style-picker"><legend>Stile interfaccia</legend><div>{VISUAL_STYLES.map(style => <button key={style.value} type="button" aria-pressed={visualStyle === style.value} onClick={() => setVisualStyle(style.value)}><strong>{style.label}</strong><span>{style.description}</span></button>)}</div></fieldset>
+          <label>Tema</label>
           <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.4rem' }}>
             {THEME_OPTIONS.map(opt => (
               <button
@@ -124,9 +129,9 @@ export default function Preferences() {
                 onClick={() => setMode(opt.value)}
                 style={{
                   flex: 1, flexDirection: 'column', gap: '0.2rem', padding: '0.6rem 0.5rem',
-                  background: mode === opt.value ? 'var(--accent)' : undefined,
-                  color: mode === opt.value ? '#fff' : undefined,
-                  borderColor: mode === opt.value ? 'var(--accent)' : undefined,
+                  background: mode === opt.value ? 'var(--ink)' : undefined,
+                  color: mode === opt.value ? 'var(--bg-card)' : undefined,
+                  borderColor: mode === opt.value ? 'var(--ink)' : undefined,
                   fontSize: '0.82rem',
                 }}
               >
@@ -139,10 +144,10 @@ export default function Preferences() {
       </div>
 
       <div className="card" style={{ maxWidth: 560 }}>
-        <div className="section-title" style={{ marginBottom: '1rem' }}>Financial Helper</div>
+        <div className="section-title" style={{ marginBottom: '1rem' }}>Assistente</div>
 
         <div className="form-group">
-          <label>Model presets</label>
+          <label>Modelli suggeriti</label>
           {MODEL_PRESETS.map(group => (
             <div key={group.group} style={{ marginBottom: '0.6rem' }}>
               <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.3rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
@@ -157,9 +162,9 @@ export default function Preferences() {
                     style={{
                       fontSize: '0.75rem',
                       padding: '0.2rem 0.55rem',
-                      background: model === m.value ? 'var(--accent)' : undefined,
-                      color: model === m.value ? '#fff' : undefined,
-                      borderColor: model === m.value ? 'var(--accent)' : undefined,
+                      background: model === m.value ? 'var(--ink)' : undefined,
+                      color: model === m.value ? 'var(--bg-card)' : undefined,
+                      borderColor: model === m.value ? 'var(--ink)' : undefined,
                     }}
                   >
                     {m.label}
@@ -171,14 +176,14 @@ export default function Preferences() {
         </div>
 
         <div className="form-group">
-          <label>Model string</label>
+          <label>Nome del modello</label>
           <input
             value={model}
             onChange={e => setModel(e.target.value)}
             placeholder="e.g. gemini/gemini-2.5-flash"
           />
           <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-            Click a preset above or type any LiteLLM-compatible string.
+            Scegli un modello suggerito o inserisci il nome completo del modello.
           </p>
         </div>
 
@@ -188,17 +193,17 @@ export default function Preferences() {
             type="password"
             value={apiKey}
             onChange={e => setApiKey(e.target.value)}
-            placeholder={apiKeySaved ? '•••••••• saved — paste a new key to replace' : "sk-… or your provider's key"}
+            placeholder={apiKeySaved ? '•••••••• salvata — inserisci una nuova chiave per sostituirla' : "sk-… or your provider's key"}
             autoComplete="new-password"
           />
           <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-            Encrypted at rest, stored server-side only — never sent to the browser.
-            For Ollama leave this blank.
+            La chiave è cifrata e conservata sul server; non viene restituita al browser.
+            Con Ollama lascia il campo vuoto.
           </p>
         </div>
 
         <button className="btn btn-primary" onClick={save} disabled={saving}>
-          {saving ? 'Saving…' : 'Save'}
+          {saving ? 'Salvataggio…' : 'Salva'}
         </button>
       </div>
     </div>

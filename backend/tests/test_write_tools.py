@@ -102,3 +102,29 @@ def test_keyword_rule_reapply_requires_preview_then_confirm(tmp_db):
     assert applied["ok"] is True
     assert applied["updated"] == 1
     assert db.get_transactions_df().iloc[0]["category"] == "Test Entertainment"
+
+
+def test_keyword_rule_preview_and_reapply_ignore_unmatched_transactions(tmp_db):
+    import database as db
+    import write_tools
+
+    db.upsert_category(Category(name="Test Shopping", color="#C97B4A"))
+    db.upsert_keyword_rule(KeywordRule(keyword="amazon", category_name="Test Shopping"))
+    account = db.add_account("Brokerage", "EUR", "stocks")
+    db.insert_transactions([
+        {
+            "account_id": account.id,
+            "date": "2026-07-01",
+            "description": "BUY 3 ANX @ 10",
+            "amount": -30,
+            "amount_base": -30,
+            "category": "Trade",
+        }
+    ])
+
+    preview = _data(write_tools.preview_reapply_keyword_rules({"limit": 5}))
+    applied = _data(write_tools.reapply_keyword_rules({"confirm": True}))
+
+    assert preview["total_changes"] == 0
+    assert applied["updated"] == 0
+    assert db.get_transactions_df().iloc[0]["category"] == "Trade"
